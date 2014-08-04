@@ -1,0 +1,39 @@
+%L Kean96a
+%A G. Keane
+%A R. Woods
+%A K. Power
+%T VLSI Architectures for High Performance Low Power Signal Processing Applications 
+%B Proceedings of the Irish DSP and Control Conference (IDSPCC)
+%C Dublin, Ireland
+%D June 1996
+%X Power optimisations can be made at the algorithmic, architectural, circuit and technology levels. While circuit  and technology aspects are well known, transformations at the architectural level can provide  considerable  power  reduction. In this paper a low power integrated circuit  based  on multipliers  which implements some of these power minimisations is presented. Using a combination of circuit optimisations power savings of 80% are achieved. The chip has been designed in such a way that it allows technology, circuit style and architectural optimisations to be analyzed.
+%K Low Power VLSI Design
+%K Complementary Pass Transistor Logic
+%K Low Power VLSI Architectures
+%% ftp: idspcc96.ps
+
+%L Kean98a
+%A G. Keane
+%A J.R. Spanier
+%A R. Woods
+%T The Impact of Data Characteristics and Hardware Topology on Hardware Selection for Low Power DSP
+%B To appear in the Proceedings of the International Symposium on Low Power Electronics and Design (ISLPED)
+%C Monterey, CA
+%D August 1998
+%X Adders and multipliers are key operations in DSP systems. The power consumption of adders is well understood but there are few detailed results on the choice of multipliers available.  This paper considers how the power consumption of a number of multiplier structures such as Carry-Save array and Wallace Tree multipliers varies with data wordlengths and different layout strategies.  In all cases, results were obtained from EPIC PowerMill<SUP><FONT SIZE="-3">TM</FONT></SUP>  simulations of actual synthesised circuit layouts.  Analysis of the results highlights the effects of routing and interconnect optimization for low power operation and gives clear indications on choice of multiplier structure and design flow for the rapid design of DSP systems.
+%K Low Power DSP Systems
+%K Optimum Hardware Selection
+%K Multiplier Structures
+%% ftp: islped98.ps
+
+%L Kean98b
+%A G. Keane
+%A J.R. Spanier
+%A R. Woods
+%T The Impact of Data Characteristics on Hardware Selection for Low-Power DSP
+%B To appear in the Proceedings of European Signal Processing Conference (EUSIPCO)
+%C Rhodes, Greece
+%D September 1998
+%X Adders and multipliers are key operations in DSP systems. The power consumption of adders is well understood but there is no analysis based on detailed simulation of multipliers available. This paper considers the power consumption of a number of multiplier structures such as array and Wallace Tree multipliers and examines how the power varies with data wordlengths and different applications (e.g. image and speech). In all cases results were obtained from EPIC PowerMill<SUP><FONT SIZE="-3">TM</FONT></SUP> simulations of synthesised circuit layouts, a process which is accepted to be within 5% of the actual silicon. Analysis of the results highlights the effects of routing and interconnect optimization for low power operation and gives clear indications on choice of multiplier structure and design flow for the rapid design of DSP systems. The application of the findings to system level design can result in savings of up to 40% in power.
+%% ftp: eusipco98.ps
+
