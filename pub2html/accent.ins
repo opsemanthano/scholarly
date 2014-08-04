@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl -s
+#! ##PERLEXEC## -s
 #
 # accent	--- translate dead-key accents to troff, tex etc.
 #
@@ -32,7 +32,10 @@
 # http://cui_www.unige.ch/ftp/PUBLIC/oscar/scripts/README.html
 # or ftp: cui.unige.ch:/PUBLIC/oscar/scripts/
 
-unshift(@INC,"/user/u1/oscar/Cmd/PerlLib");
+# unshift(@INC,"/user/u1/oscar/Cmd/PerlLib");
+
+unshift(@INC,"##INSTALL##");
+
 require("accent.pl");
 
 $u = 'Usage: accent [<mode>] [<files> ...]

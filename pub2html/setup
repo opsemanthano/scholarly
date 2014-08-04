@@ -1,0 +1,25 @@
+#!/bin/csh -f
+
+unalias rm
+set InstallDir = `pwd`
+set locDir = "papers/";	# Should have last "/" for path
+set PerlExec = "/usr/local/bin/perl";
+set WebPubs = "/pkg9/DSP.WEB/LPiD/frame";	# Where publications go (HTML)
+set WebAbs = "/pkg9/DSP.WEB/LPiD/papers";	# Where Abstracts go (HTML)
+
+if (-e sed.com) then
+ rm -f sed.com
+endif
+
+echo 's:##INSTALL##:'{$InstallDir}/:g > sed.com
+echo 's:##LOCATION##:'{$locDir}:g >> sed.com 
+echo 's:##PERLEXEC##:'{$PerlExec}:g >> sed.com
+echo 's:##WEBPUBS##:'{$WebPubs}:g >> sed.com
+echo 's:##WEBABS##:'{$WebAbs}:g >> sed.com
+
+foreach file (*.ins)
+ sed -f sed.com $file > $file:r
+ if ($file:r == pub2html) then
+   chmod 755 $file:r
+ endif
+end

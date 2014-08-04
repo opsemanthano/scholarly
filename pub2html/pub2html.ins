@@ -1,0 +1,26 @@
+#!/bin/csh -f
+
+unalias rm
+unalias cp
+unalias mv
+alias perl `which perl`	# Not needed if ##PERLEXEC## is setup properly
+			# If this is so remove the perl words in this script
+
+if (-e Abstracts.html) then
+ rm Abstracts.html
+endif
+
+if (-e public.html) then
+ rm public.html
+endif
+
+perl ##INSTALL##bib -l ##INSTALL##references $1 > .references
+cp .references ##INSTALL##references
+rm .references
+
+perl ##INSTALL##bib -ha ##INSTALL##references > public.html
+
+cp public.html ##WEBPUBS##/public.html
+cp Abstracts.html ##WEBABS##/Abstracts.html
+rm *.html
+

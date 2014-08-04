@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl
+#! ##PERLEXEC##
 #
 # bib        	--- format refer files for framemaker, latex, HTML etc.
 #
@@ -11,6 +11,7 @@
 # Some of this should be re-written and moved to bib.pl!
 #
 # New Author : J. R. Spanier ( Modified: 14/3/95)
+#			     ( Modified for frames: 2/6/98 - ha and h only)
 #
 # Hacked for own system use ( mainly for Mosaic/httpd web )
 #
@@ -18,10 +19,10 @@
 
 # unshift(@INC,"/user/u1/oscar/Cmd/PerlLib");
 
-# unshift(@INC,"/home/tallis/des3jrs/algo");
-unshift(@INC,"/usr/local/etc/httpd/pub2html");
+unshift(@INC,"##INSTALL##");
 require("bib.pl");
 
+$where = "##LOCATION##";
 $out = "Abstracts.html"; 
 
 $usg = 'Usage: bib -<output style> [<refer file> ...]
@@ -116,16 +117,28 @@ elsif ($td) {
 elsif ($h || $ha || $hk) {
     # NB: prints index to STDOUT; abstracts to $bib'lbl.html
     if (!$hk) {
-	    print "<TITLE>Published Documents</TITLE>\n\n";
-	    print "<H1>Documents Published By The Group</H1>\n\n<OL>\n";
-	    print "\n<B>If you decide to grab a copy of any document, it whould be appreciated if you E-Mailed the author/s concerned.</B><P>\n";
+# More stuff for web (2/6/98 JRS)
+	    &bib'html_header(\*STDOUT);
+# end
+	    print "<TITLE>Published Documents</TITLE>\n";
+	    print "</HEAD>\n<BODY BGCOLOR=\"#000000\" TEXT=\"#FFFFFF\"";
+	    print " LINK=\"#2194FF\" VLINK=\"#2194FF\" ALINK=\"#FFFF00\">\n\n";
+#	    print "<CENTER><H1>Documents Published By The Group</H1></CENTER>";
+#   	    print "\n\n<OL>\n";
+	    &bib'html_copyright(\*STDOUT);
+	    print "<OL>\n";
     }
 
 # Start of JRS Modification
 
     if ($ha) {
                 open(OUT,">$out") || die "Can't write $out";
-		print OUT "<TITLE>Abstracts</TITLE>\n\n";
+		&bib'html_header(\*OUT);
+		print OUT "<TITLE>Abstracts</TITLE>\n";
+                print OUT "</HEAD>\n<BODY BGCOLOR=\"#000000\"";
+		print OUT " TEXT=\"#FFFFFF\" LINK=\"#2194FF\"";
+		print OUT " VLINK=\"#2194FF\" ALINK=\"#FFFF00\">\n\n";
+		&bib'html_copyright(\*OUT);
     }
 
 # end of JRS modification
@@ -140,9 +153,12 @@ elsif ($h || $ha || $hk) {
 	}
 
 # Another mod for titles
+                $bib'ref =~ s/,''<\/B>/''<\/B>,/go;   # fix commas
+
 	if ($bib'ftp ne "") {
-		$bib'ref=~ s/<B>``/<B>``<A href=http:$bib'url>/go;
-		$bib'ref=~ s/,''<\/B>/<\/A> ,''<\/B>/go;
+		$bib'ref=~ s/<B>``/<B>``<A href=http:$where$bib'url target=_self>/go;
+#		$bib'ref=~ s/,''<\/B>/<\/A> ,''<\/B>/go;
+                $bib'ref=~ s/''<\/B>,/<\/A> ''<\/B>,/go;
 	}
 # end of mod
 
@@ -163,7 +179,7 @@ elsif ($h || $ha || $hk) {
 #            }
 #            print OUT $bib'sig;
 #	    close(OUT);
-	    print "<br><br><A HREF=\"$out#$bib'lbl\"><I>Click To See Abstract</I></A><br><br>\n";
+	    print "<br><br><A HREF=\"$where$out#$bib'lbl\" target=\"_self\"><I>Click To See Abstract</I></A><br><br>\n";
 	}
 #	elsif ($bib'ftp ne "") {
 #	    print "<B>ftp:</B><A HREF=\"$bib'url\">$bib'ftp</A><P>\n\n";
@@ -172,6 +188,7 @@ elsif ($h || $ha || $hk) {
     if ($hk) { &bib'endfiles; }
     else {
    	  print "</OL>\n$bib'sig";
+	  print "</BODY>\n</HTML>\n";
     }
 
 
@@ -179,6 +196,7 @@ elsif ($h || $ha || $hk) {
 
     if ($ha) {
            print OUT $bib'sig;
+	   print OUT "</BODY>\n</HTML>\n";
            close(OUT);
     }
 

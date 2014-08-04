@@ -1,0 +1,5 @@
+#!/bin/csh -f
+
+foreach file (*.ins)
+ rm $file:r
+end

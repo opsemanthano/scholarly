@@ -1,0 +1,60 @@
+This file contains system information for installing pub2html.
+ 
+Copyright : June 1998.
+Location:   Queen's University of Belfast, School of Engineering.
+Author:     J.R. Spanier
+
+Secondary Authors: M.J. Jubb , Author's of NCSA HTTPD Server and
+                   Oscar Nierstrasz ( original perl script author ).
+
+Package Information:
+
+        Files: accent.mml, accent.pl.ins, bib.ins, bib.pl.ins   (Perl scripts)
+	       accent.ins					(Perl scripts)
+               pub2html.1                       		(Manual page)
+               pub2html.c                       		(C source)
+	       pub2html.ins					(CSH setup)
+	       references.orig, references.test		     (Durham examples)
+	       README					    	(1st Version)
+	       README.1ST					(This file)
+	       setup, clean					(install files)
+	       references					(touched file)
+	       Abstracts.html, public.html		  (Durham HTML examples)
+
+        Requirements:
+                        CSH shell.
+                        perl interpreter.
+			sed.
+
+SYSTEM INSTALLATION:
+
+- modify setup to customize
+
+- all PERL programs are installed in /usr/local/bin and is currently
+  adjustable via setup using PerlExec
+
+- make sure setup and clean are executable
+
+- modify pub2html.ins to site needs
+
+- run setup and enjoy
+
+- read README for previous notes
+
+- bib.ins and bib.pl.ins will need customizing to site 
+  (e.g. html_header in bib.pl and html_copyright)
+
+WARNINGS:
+
+- pub2html requires an argument which is the reference file to be appended.
+  It must be in the refer format AND a newline at the end of each reference.
+  SEE pub2html.1 manpage for details !!
+
+- Initially references file (where all are kept) may not exist. If this is so,
+  use touch <filename> at the location where it would be stored.
+
+- Abstracts in refer format are using '%X' and newlines within this field must
+  be generated with <BR> assumming output is to HTML (web). Old version could
+  not handle '%' within field properly.
+
+-------------------------- END 0F README.1ST -----------------------------------
