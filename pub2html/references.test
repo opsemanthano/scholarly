@@ -1,0 +1,29 @@
+%L Itag94a
+%T Real-time Synthesis on a Multi-processor Network
+%A T. Itagaki
+%A A. Purvis
+%A P.D. Manning
+%J Proceedings of the International Computer Music Conference
+%C Aarhus, Denmark
+%D September 1994
+%P 382-385
+%X At the 1990 ICMC, this research group presented a paper on a multi-transputer based system and demonstrated a prototype module consisting of 16 transputers on a single card. During the intervening period, ten of these cards have been developed into an
+perational audio processing network, using 160 x T800 floating-point transputers, clocked at 17.5 MHz. This paper descibes the network and the first implementations of real-time direct synthesis on it, using a MIDI-based control system. The key research i
+sue concerns the optimal usage of processor inter-communications and scheduling for audio processors.
+%K Sinusoidal oscillators
+%K Digital filters
+%K Transputers
+
+%L Phil94a
+%T A multirate optimisation for real-time additive synthesis
+%A D.K. Phillips
+%A A. Purvis
+%A S. Johnson
+%J Proceedings of the International Computer Music Conference
+%C Aarhus, Denmark
+%D September 1994
+%P 364-367
+%K multirate
+%K CORDIC
+%K Sinusoidal oscillators
+

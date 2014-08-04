@@ -1,0 +1,150 @@
+.\" @(#)pub2html.man 1.00	95/03/15
+.TH pub2html 1 "15 March 1995"  "Local Version"
+.SH NAME
+pub2html \- Creates HTML documents containing papers published by the group.
+.SH SYNOPSIS
+[
+.I
+-o -g|-z
+]
+< 
+.IR
+reference file
+>
+.SH DESCRIPTION
+.LP
+.B pub2html
+is a local program which allows users to show their published work
+over the Internet, by using the Hypertext Markup Language ( HTML ). 
+To see the results of this program requires an HTML browser ( eg Mosaic ).
+.SH OPTIONS
+.TP
+.B -o
+This option if set, will stop automatic label
+generation. This should only be used if you create a
+unique label.  Failure to create a unique label, will 
+confuse the program and will make the hot-links of the HTML document fail.
+It is better to 
+.I NEVER
+use this option !
+.TP
+.B -g | -z
+This option will select either the 
+.B compress
+or
+.B gzip
+programs to compress the postscript files. The default is gzip.
+.SH FILES
+.TP
+.B reference file
+This file is based on the following format :-
+.RS
+.TP
+.B %L
+Label ( optional )
+.TP
+.B %K
+Keywords ( keyword index )
+.TP
+.B %A
+Author/s
+.TP
+.B %E
+Editor/s
+.TP
+.B %AQ
+Corporate Author/s
+.TP
+.B %EQ
+Corporate Editor/s
+.TP
+.B %T
+Title of document
+.TP
+.B %J
+Journal Name
+.TP
+.B %B
+Article in Book 
+.TP
+.B %R
+Technical Report 
+.sp 1
+.TP
+If no labels ( %J, %B or %R ), then
+publication assumed to be a book.
+.TP
+.B %S
+The Series
+.TP
+.B %V
+The Volume
+.TP
+.B %N
+The Number
+.TP
+.B %I
+The Institution
+.TP
+.B %C
+The City
+.TP
+.B %D
+The Date the document was written/published.
+.TP
+.B %P
+Page Numbers.
+.TP
+.B %O
+Other Info. ( eg. To appear )
+.TP
+.B	 --- Special Optional Formats ----
+.TP
+.B %X
+The Abstract
+.TP
+.B %%
+Comments
+.TP
+.B %% ftp:
+The name of the document in postscript form
+( can also be in compressed form - .gz or .Z )
+.RE
+.SH EXAMPLE
+Except for
+.RB A ,
+.RB C ,
+.RB I ,
+.RB O ,
+.RB % ,
+each field should be given just once.
+Only relevant fields should be supplied.
+.RS
+.nf
+.ft B
+%A      Mark Twain
+%T      Life on the Mississippi
+%I      Penguin Books
+%C      New York
+%D      1978
+%% ftp: file.ps
+.fi
+.ft R
+.RE
+.SH CAVEATS
+The %% ftp: field
+.B must
+have a space in between the colon and the name of the postscript file.
+.SH BUGS
+This program must be run in the same directory as your postscript file, consequently the ftp field should have no path information !! 
+
+The reference file does not have to be in the same directory as the postscript file.
+
+All filenames should not be longer than 256 characters; this includes path information.
+ 
+This program should be used with care !!
+.SH AUTHOR
+.RE 
+.LP
+Jonathan Spanier (J.R.Spanier@durham.ac.uk)
+

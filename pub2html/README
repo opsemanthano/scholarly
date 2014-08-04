@@ -1,0 +1,155 @@
+This file contains system information for installing pub2html.
+
+Copyright : March 1995.
+Location:   University of Durham, School of Engineering.
+Author:	    J.R. Spanier
+
+Secondary Authors: M.J. Jubb , Author's of NCSA HTTPD Server and
+		   Oscar Nierstrasz ( original perl script author ).
+
+Package Information:
+
+	Files: accent, accent.pl, bib, bib.pl	(Perl scripts)
+	       pub2html.1			(Manual page)
+	       pub2html.c			(C source)
+
+	Requirements:
+			gcc or cc compiler.
+			perl interpreter.
+
+Installed Directory:	/usr/local/etc/httpd/pub2html/
+
+Perl Information:
+
+-	All perl scripts used were tested on pre-release version 5 of perl.
+-	Perl was installed into '/usr/local/bin/perl' ( executable ) and 
+	perl libraries in '/usr/local/lib/perl5'.
+
+-	The perl scripts used in this distribution can easily be modified to
+	your own tastes. These scripts are compiled at run time and executed;
+	just like the ye old BASIC language and possibly forth.
+
+-	The perl scripts control the HTML language generation and reference
+	parsing. They generate Abstract.html, Index.html files depending on
+	the switches used in 'bib'.
+
+-	The 'bib' perl script has a new command called '-redirect' to 
+	write stdout data to a file. The filename has only alphanumeric 
+	characters, so no path information can be used. This was used to
+	enable perl to run under the effective user ID of root and run
+	as securely as possible.
+
+C Source Information:
+
+-	pub2html assumes that the httpd server has been configured in
+	the directory '/usr/local/etc/httpd' and will read the 'srm.conf'
+	file found in '/usr/local/etc/httpd/conf' directory.
+
+-	The 'srm.conf' file uses the NCSA HTTPD Server format and pub2html.c
+	may need substantial recoding if the parsing routines fail to read it.
+	As far as the author knows, this may only be a problem with other
+	httpd servers like the CERN one ??!!
+
+-	Our Web Server is configured to provide aliases for the following :-
+
+	/icons/		<httpd_server_installed>/icons/
+	/pics/		<httpd_server_installed>/pics/
+	/publications/	<publication_location>/
+
+	/username/	<user home directory>/public_html/
+
+-	The first parameter eg. '/icons/' is the server fake directory and
+	the other parameter tells the server what directory to access when
+	called by the fake directory.
+
+-	The '/publications/' parameter is system administrator defined as
+	is the valid users whom appear via '/username/'.
+
+-	It is standard practice to have user login names as the users
+	home directory, and this is used to check for valid users.
+	If a valid user is found then pub2html continues, otherwise it
+	exits and says the user has not been licensed.
+
+-	Quota Defines are set up, as our system which uses an automounter
+	to cross mount disks.
+-	The program is set up to only run under IS_CAPELLA, this is due
+	to simplifying the file locking mechanism.
+
+-	The file lock works on the dummy file PROTECT and the new user or
+	last user who used the program apperas in the WHO file.
+
+-	There are definitions for the programs 'cp', 'mv', 'compress'
+	and 'gzip' to be altered, depending on how your system was/is 
+	configured.
+
+-	The definition for LOGNAME is used to find the real user running
+	pub2html. This is used to read the LOGNAME environment variable.
+	On Sun SPARC stations, this name does not alter if you become
+	super-ueser ( using 'su' ).
+
+-	The program runs with an effective user as root ( ie. full
+	privaledges ) and is required for the quota and file copy/management
+	systems used by the program.
+
+SYSTEM INSTALLATION:
+
+- modify files as you see fit using above information as a guide.
+
+- compile with cc or gcc
+
+	cc -DDEBUG -o pub2html pub2html.c
+
+or
+	gcc -DDEBUG -o pub2html pub2html.c
+
+- Where -DDEBUG is optional.
+
+- change ownership etc.. ** WARNING : must be super-user to do this !! **
+
+	chown root pub2html
+	chmod 4755 pub2html	# the 4000 sets execute with user ID of file.
+
+- install pub2html in a globally accessable file
+
+	cp pub2html /usr/local/bin/pub2html
+or
+	mv pub2html /usr/local/bin/pub2html
+
+- install man page
+
+	cp pub2html.1 /usr/local/man/man1/pub2html.1
+
+- and enjoy the package.
+
+WARNINGS:
+	 If a user sends the same reference file into the program,
+	 this will enlarge the Publications.html reference file and
+	 the program might get very confused.
+
+	 It is up to the users to create meaningful and unique names for
+	 there postscript files and labels ( if they want there own  -
+	 see the manual page ).
+
+EXTENSIONS:
+	Remove -redirect option from bib and allow pipes that duplicate the
+	stdout of the child process and use this to write directly into a
+	file controlled by the parent.
+
+	Possibility of running perl using the libperl.a library from within
+	the C programme.
+
+	Fixing all posible errors involving limited number of charcters for
+	the path and also providing proper error detection and correction.
+
+SUITABILITY:
+	This package is suitable for insstallation on computers which
+	have there own web server ( httpd ) as pub2html uses the server's
+	configuration information to operate. ( Publications directory and 
+	valid user determination. )
+
+	If the user just wants to control his own published papers then
+	the perl scripts are all that are required.
+
+-------------------------- END 0F README -----------------------------------
+
+

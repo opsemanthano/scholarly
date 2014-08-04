@@ -1,0 +1,108 @@
+<MML 1.0 Accent macros>
+<Comment "copied from Oscar Nierstrasz, corrected and completed by E. Casais">
+<Comment "accent.mml --- Framemaker accents">
+
+<!DefineMacro UAgrave       "<Character \\xcb >" >
+<!DefineMacro UAacute       "<Character \\xe7 >" >
+<!DefineMacro UAcircumflex  "<Character \\xe5 >" >
+<!DefineMacro UAtilde       "<Character \\xcc >" >
+<!DefineMacro UAdieresis    "<Character \\x80 >" >
+<!DefineMacro UAring        "<Character \\x81 >" >
+<!DefineMacro UAE           "<Character \\xae >" >
+
+<!DefineMacro agrave        "<Character \\x88 >" >
+<!DefineMacro aacute        "<Character \\x87 >" >
+<!DefineMacro acircumflex   "<Character \\x89 >" >
+<!DefineMacro atilde        "<Character \\x8b >" >
+<!DefineMacro adieresis     "<Character \\x8a >" >
+<!DefineMacro aring         "<Character \\x8c >" >
+<!DefineMacro ae            "<Character \\xbe >" >
+
+
+<!DefineMacro UEgrave       "<Character \\xe9 >" >
+<!DefineMacro UEacute       "<Character \\x83 >" >
+<!DefineMacro UEcircumflex  "<Character \\xe6 >" >
+<!DefineMacro UEdieresis    "<Character \\xe8 >" >
+
+<!DefineMacro egrave        "<Character \\x8f >" >
+<!DefineMacro eacute        "<Character \\x8e >" >
+<!DefineMacro ecircumflex   "<Character \\x90 >" >
+<!DefineMacro edieresis     "<Character \\x91 >" >
+
+
+<!DefineMacro UIgrave       "<Character \\xed >" >
+<!DefineMacro UIacute       "<Character \\xea >" >
+<!DefineMacro UIcircumflex  "<Character \\xeb >" >
+<!DefineMacro UIdieresis    "<Character \\xec >" >
+
+<!DefineMacro igrave        "<Character \\x93 >" >
+<!DefineMacro iacute        "<Character \\x92 >" >
+<!DefineMacro icircumflex   "<Character \\x94 >" >
+<!DefineMacro idieresis     "<Character \\x95 >" >
+<!DefineMacro dotlessi      "<Character \\xf5 >" >
+
+
+<!DefineMacro UOgrave       "<Character \\xf1 >" >
+<!DefineMacro UOacute       "<Character \\xee >" >
+<!DefineMacro UOcircumflex  "<Character \\xef >" >
+<!DefineMacro UOtilde       "<Character \\xcd >" >
+<!DefineMacro UOdieresis    "<Character \\x85 >" >
+<!DefineMacro UOslash       "<Character \\xaf >" >
+<!DefineMacro UOE           "<Character \\xce >" >
+
+<!DefineMacro ograve        "<Character \\x98 >" >
+<!DefineMacro oacute        "<Character \\x97 >" >
+<!DefineMacro ocircumflex   "<Character \\x99 >" >
+<!DefineMacro otilde        "<Character \\x9b >" >
+<!DefineMacro odieresis     "<Character \\x9a >" >
+<!DefineMacro oslash        "<Character \\xbf >" >
+<!DefineMacro oe            "<Character \\xcf >" >
+
+
+<!DefineMacro UUgrave       "<Character \\xf4 >" >
+<!DefineMacro UUacute       "<Character \\xf2 >" >
+<!DefineMacro UUcircumflex  "<Character \\xf3 >" >
+<!DefineMacro UUdieresis    "<Character \\x86 >" >
+
+<!DefineMacro ugrave        "<Character \\x9d >" >
+<!DefineMacro uacute        "<Character \\x9c >" >
+<!DefineMacro ucircumflex   "<Character \\x9e >" >
+<!DefineMacro udieresis     "<Character \\x9f >" >
+
+
+<!DefineMacro UYdieresis    "<Character \\xd9 >" >
+<!DefineMacro ydieresis     "<Character \\xd8 >" >
+
+
+<!DefineMacro UCcedilla     "<Character \\x82 >" >
+<!DefineMacro ccedilla      "<Character \\x8d >" >
+
+<!DefineMacro UNtilde       "<Character \\x84 >" >
+<!DefineMacro ntilde        "<Character \\x96 >" >
+
+
+<!DefineMacro germandbls    "<Character \\xa7 >" >
+
+
+<!DefineMacro alpha      "<family symbol> <Character \\x61 > <family times>" >
+<!DefineMacro beta       "<family symbol> <Character \\x62 > <family times>" >
+<!DefineMacro pi         "<family symbol> <Character \\x70 > <family times>" >
+<!DefineMacro tau        "<family symbol> <Character \\x74 > <family times>" >
+
+
+<!DefineMacro endash        "<Character \\xd0 >" >
+<!DefineMacro emdash        "<Character \\xd1 >" >
+
+<!DefineMacro quotedblleft  "<Character \\xd2 >" >
+<!DefineMacro quoteblright  "<Character \\xd3 >" >
+<!DefineMacro quoteleft     "<Character \\xd4 >" >
+<!DefineMacro quoteright    "<Character \\xd5 >" >
+
+<!DefineMacro guillemotleft "<Character \\xc7 >" >
+<!DefineMacro guillemotright "<Character \\xc8 >" >
+<!DefineMacro guilsinglleft "<Character \\xdc >" >
+<!DefineMacro guilsinglright "<Character \\xdd >" >
+
+<!DefineMacro langle "<Character \\< >" >
+<!DefineMacro rangle "<Character \\> >" >
+

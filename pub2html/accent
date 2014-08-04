@@ -1,0 +1,70 @@
+#! /usr/local/bin/perl -s
+#
+# accent	--- translate dead-key accents to troff, tex etc.
+#
+# Filter "dead-key" conventions to produce the right
+# sequences for TeX, Framemaker mml files or troff.
+#
+# Examples:
+# acute accent:	\'a
+# grave accent:	\`e
+# circumflex:	\^o (or \<o)
+# dieresis:	\"u (or \:u)
+# tilde:	\~n
+# cedilla:	\,c
+# slash:	\/o
+#
+# ring:		\oa		*** FRAME ONLY
+# ae:		\ae		*** FRAME ONLY
+#
+# tau:		\tau		*** PRESENTLY ONLY FOR TEX ***
+# pi:		\pi
+#
+# Author: Oscar Nierstrasz (Revised: Jan 1990)
+# Added 7 & 8 bit option (Sept 1991)
+#
+# Rewritten as perl script 27/6/93
+#
+# Uses: accent.pl
+# Uses: accent.mml
+#
+# This script and friends can be found at:
+# http://cui_www.unige.ch/ftp/PUBLIC/oscar/scripts/README.html
+# or ftp: cui.unige.ch:/PUBLIC/oscar/scripts/
+
+unshift(@INC,"/user/u1/oscar/Cmd/PerlLib");
+require("accent.pl");
+
+$u = 'Usage: accent [<mode>] [<files> ...]
+	-strip	-- translate umlauts and delete rest
+	-ms	-- generate troff -ms (.AM) accents
+	-tex	-- generate TeX accents
+	-mml	-- generate FrameMaker accents
+	-html	-- generate HTML accents
+	-o	-- use overstrike macros
+	-nix	-- undo Nixdorf macros
+	-si	-- convert DOS accents in SI files (c.f. sifix)
+	-pc	-- convert PC files (DOS?)
+	-mac	-- convert Mac files (Word?)
+	-8	-- use 8-bit meta-chars
+	-7	-- undo 8-bit meta-chars
+';
+
+# NB: flags set with -s option.
+
+if($strip) { while (<>) { &accent'strip; print; } }
+elsif($ms) { while (<>) { &accent'ms; print; } }
+elsif($tex) { while (<>) { &accent'tex; print; } }
+elsif($mml) { &accent'mml_init; while (<>) { &accent'mml; print; } }
+elsif($html) { while (<>) { &accent'html; print; } }
+elsif($o) { while (<>) { &accent'os; print; } }
+elsif($nix) { while (<>) { &accent'nix; print; } }
+elsif($si) { while (<>) { &accent'si; print; } }
+elsif($pc) { while (<>) { &accent'pc; print; } }
+elsif($7) { while (<>) { &accent'seven; print; } }
+elsif(${7bit}) { while (<>) { &accent'seven; print; } }
+elsif($8) { while (<>) { &accent'eight; print; } }
+elsif(${8bit}) { while (<>) { &accent'eight; print; } }
+
+else { die($u); }
+

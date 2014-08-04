@@ -1,0 +1,220 @@
+#! /usr/local/bin/perl
+#
+# bib        	--- format refer files for framemaker, latex, HTML etc.
+#
+# Author: Oscar Nierstrasz (Revised: 11/10/88)
+#
+# This script and friends can be found at:
+# http://cui_www.unige.ch/ftp/PUBLIC/oscar/scripts/README.html
+# or ftp: cui.unige.ch:/PUBLIC/oscar/scripts/
+#
+# Some of this should be re-written and moved to bib.pl!
+#
+# New Author : J. R. Spanier ( Modified: 14/3/95)
+#
+# Hacked for own system use ( mainly for Mosaic/httpd web )
+#
+# Uses: bib.pl
+
+# unshift(@INC,"/user/u1/oscar/Cmd/PerlLib");
+
+# unshift(@INC,"/home/tallis/des3jrs/algo");
+unshift(@INC,"/usr/local/etc/httpd/pub2html");
+require("bib.pl");
+
+$out = "Abstracts.html"; 
+
+$usg = 'Usage: bib -<output style> [<refer file> ...]
+    -txt -- plain text
+    -f   -- framemaker (numbered references)
+    -fl  -- framemaker (labelled references)
+    -ms  -- troff -ms macros
+    -tb  -- latex (thebibliography)
+    -tn  -- latex (enumerated list)
+    -td  -- latex (description list)
+    -h   -- generate HTML list of references
+    -ha  -- also generate separate abstract files
+    -hk  -- split output into files by first keyword
+    -s   -- search and print all (plausible) labels
+    -l   -- generate new labels (%L)
+    -y   -- re-write labels as YYAUTHchar (for chronological sorting)
+';
+
+# This modification will make this perl script work thro' execvp in a C program
+# and was created because a seteuid script will complain with a -s switch !!
+
+# mod by J.R.Spanier - University of Durham.
+
+# This mod, will also work normally for calling script through a shell !!
+
+$morecommands = 0;
+$flag = 0;
+
+while ($ARGV[0] =~ '^-') {
+ $_ = shift;
+ last if /^--/;
+ if (/^-txt$/) {  if ($morecommands == 0) { $morecommands = 1; $txt=1; next; } }
+ if (/^-f$/) { if ( $morecommands == 0 )  { $morecommands = 1; $f=1; next; } }
+ if (/^-fl$/) { if ( $morecommands == 0 ) { $morecommands = 1; $fl=1; next; } }
+ if (/^-ms$/) { if ( $morecommands == 0 ) { $morecommands = 1; $ms=1; next; } }
+ if (/^-tb$/) { if ( $morecommands == 0 ) { $morecommands = 1; $tb=1; next; } }
+ if (/^-tn$/) { if ( $morecommands == 0 ) { $morecommands = 1; $tn=1; next; } }
+ if (/^-td$/) { if ( $morecommands == 0 ) { $morecommands = 1; $td=1; next; } }
+ if (/^-h$/)  { if ( $morecommands == 0 )  { $morecommands = 1; $h=1; next; } }
+ if (/^-ha$/) { if ( $morecommands == 0 ) { $morecommands = 1; $ha=1; next; } }
+ if (/^-hk$/) { if ( $morecommands == 0 ) { $morecommands = 1; $hk=1; next; } }
+ if (/^-s$/)  { if ( $morecommands == 0 )  { $morecommands = 1; $s=1; next; } }
+ if (/^-l$/)  { if ( $morecommands == 0 )  { $morecommands = 1; $l=1; next; } }
+ if (/^-y$/)  { if ( $morecommands == 0 )  { $morecommands = 1; $y=1; next; } }
+ if (/^-redirect$/) { if ( $flag == 0 ) { $redirect=1; $ARGV[0]=~ /^(\w+)$/; $optional = $1; shift ARGV; $flag=1; next; } }
+}
+
+# -redirect option does not work with option -hk !!
+
+if ($redirect && !$hk)
+{
+ close(STDOUT);
+ open(STDOUT,">$optional") || die "Can't write $optional";
+}
+
+# end of JRS modification. 
+
+if ($txt) { &bib'txt_init; open(STDOUT,"| fmt");
+    while (<>) { &bib'getref; print "$bib'ref\n\n"; }
+}
+elsif ($ms) { &bib'ms_init;
+    while (<>) { &accent'ms; &bib'getref; print ".IP \"$bib'lbl\"\n$bib'ref"; }
+}
+elsif ($f) { &bib'fm_init; &accent'mml_init;
+    while (<>) { &accent'mml; &bib'getref; print "<Reference>$bib'ref"; }
+}
+elsif ($fl) { &bib'fm_init;
+    while (<>) { &accent'mml; &bib'getref; print "<UnNumRef>[$bib'lbl]\n$bib'ref"; }
+}
+elsif ($fm) { &bib'fm_init;
+    while (<>) { &accent'mml; &bib'getref; print "<Reference>[MText:$bib'lbl]\n$bib'ref"; }
+}
+elsif ($tb) {
+    print "\\begin{thebibliography}{99}\n\n";
+    &bib'tex_init;
+    while (<>) { &accent'tex; &bib'getref; print "\\bibitem{$bib'lbl}\n$bib'ref\n"; }
+    print "\n\\end{thebibliography}\n";
+}
+elsif ($tn) {
+    print "\\begin{enumerate}\n\n";
+    &bib'tex_init;
+    while (<>) { &accent'tex; &bib'getref; print "\\item\n$bib'ref\n"; }
+    print "\n\\end{enumerate}\n";
+}
+elsif ($td) {
+    print "\\begin{description}\n\n";
+    &bib'tex_init;
+    while (<>) { &accent'tex; &bib'getref; print "\\item{[$bib'lbl]}\n$bib'ref\n"; }
+    print "\n\\end{description}\n";
+}
+
+elsif ($h || $ha || $hk) {
+    # NB: prints index to STDOUT; abstracts to $bib'lbl.html
+    if (!$hk) {
+	    print "<TITLE>Published Documents</TITLE>\n\n";
+	    print "<H1>Documents Published By The Group</H1>\n\n<OL>\n";
+	    print "\n<B>If you decide to grab a copy of any document, it whould be appreciated if you E-Mailed the author/s concerned.</B><P>\n";
+    }
+
+# Start of JRS Modification
+
+    if ($ha) {
+                open(OUT,">$out") || die "Can't write $out";
+		print OUT "<TITLE>Abstracts</TITLE>\n\n";
+    }
+
+# end of JRS modification
+
+    &bib'html_init;
+    while (<>) {
+        &accent'html;
+        &bib'getref;
+	if ($hk) {
+	    ($bib'kwd = $bib'keys) =~ s/\s.*//;
+	    &bib'setfile($bib'kwd);
+	}
+
+# Another mod for titles
+	if ($bib'ftp ne "") {
+		$bib'ref=~ s/<B>``/<B>``<A href=http:$bib'url>/go;
+		$bib'ref=~ s/,''<\/B>/<\/A> ,''<\/B>/go;
+	}
+# end of mod
+
+	# print "<LI>$bib'ref\n";
+	print "\n<LI><A NAME=\"$bib'lbl\">$bib'ref</A>\n";
+        if ($ha && ($bib'abstract ne "")) {
+#	    $out = "$bib'lbl.html";
+#	    open(OUT,">$out") || die "Can't write $out";
+	    # print STDERR "Creating $out\n";
+#            print OUT "<TITLE>$bib'title</TITLE>\n\n";
+            print OUT "<A NAME=\"$bib'lbl\"><H2>$bib'title</H2></A>\n\n";
+            print OUT "$bib'ref<P>\n\n";
+            print OUT "<H3>Abstract</H3>\n$bib'abstract<P>\n\n";
+#	    $what = "abstract";
+#            if ($bib'ftp ne "") {
+#		$what .= "+ftp";
+#                print OUT "<B>ftp:</B><A HREF=\"$bib'url\">$bib'ftp</A><P>\n\n";
+#            }
+#            print OUT $bib'sig;
+#	    close(OUT);
+	    print "<br><br><A HREF=\"$out#$bib'lbl\"><I>Click To See Abstract</I></A><br><br>\n";
+	}
+#	elsif ($bib'ftp ne "") {
+#	    print "<B>ftp:</B><A HREF=\"$bib'url\">$bib'ftp</A><P>\n\n";
+#	}
+    }
+    if ($hk) { &bib'endfiles; }
+    else {
+   	  print "</OL>\n$bib'sig";
+    }
+
+
+# Final JRS mod.
+
+    if ($ha) {
+           print OUT $bib'sig;
+           close(OUT);
+    }
+
+    if ($redirect && !$hk) {
+		close(STDOUT);
+    }
+
+# end mod.
+
+}
+
+# generate new labels:
+elsif ($l) { &bib'genlabels;
+	     close(STDOUT) if ($redirect) ;
+}
+# re-write labels with YEAR first:
+elsif ($y) {
+	$/ = "\n";
+	while (<>) {
+		s/^%L ([A-Za-z]+)(\d+)([a-z]+)/%L $2 $1$2$3/;
+		print;
+	}
+}
+# search and print (plausible) labels:
+elsif ($s) {
+    while (<>) {
+        while (s/\b([a-zA-Z]{2,4}[0-9]{2}[a-z]?)\b//) {
+            push(@labels,$1);
+        }
+    }
+    $, = "\n";
+    print sort(@labels);
+}
+else {
+    die $usg ;
+}
+
+__END__
+
