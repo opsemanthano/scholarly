@@ -2,9 +2,12 @@
 %%%  @LaTeX-class-file{
 %%%     filename        = "DUThesis.cls",
 %%%     version         = "1.0",
+%%%	version		= "1.1",
 %%%     date            = "9 April 1997",
+%%%	date		= "19 November 1997",
 %%%     writtenby       = "Jonathan Spanier",
 %%%     email           = "J.R.Spanier@durham.ac.uk",
+%%%	email		= "J.R.Spanier@qub.ac.uk",
 %%%     keywords        = "LaTeX, thesis, Durham Thesis",
 %%%     docstring       = "This file provides a thesis class for the
 %%%                        University of Durham, England."
@@ -40,7 +43,8 @@
 % This thesis class uses the following packages:-
 %
 % (1) fancyheadings	(essential)
-% (2) draftcopy		(optional and currently inativated [line 155] )
+% (2) letterspace	(essential)
+% (3) draftcopy		(optional and currently inativated [line 161] )
 %
 %  WARNING - WARNING - WARNING - WARNING - WARNING - WARNING - WARNING
 %
@@ -98,6 +102,8 @@
     [1997/04/09 v1.0 University of Durham Thesis Class]
 \typeout{By Jonathan Spanier adapted from many thesis styles}
 \RequirePackage{fancyheadings}
+% Modification 19/11/97 to enable letterspace for chapter prettyfier !!
+\RequirePackage{letterspace}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Changeable Parameters   %
@@ -311,8 +317,12 @@
   \ifnum \c@secnumdepth >\m@ne
    \if@mainmatter
      \mbox{
-        \scshape \huge \@chapapp{}}
-       \ \normalfont \Huge \thechapter
+% Previous 1.0 incarnation
+%        \scshape \huge \@chapapp{}}
+        \scshape \huge \letterspace to 1.4\naturalwidth {Chapter}}
+% Previoua 1.0 incarnation
+%       \ \normalfont \Huge \thechapter
+       \ \ \ \normalfont \Huge \thechapter
        \\[20pt]
    \fi
   \fi
@@ -534,7 +544,7 @@
        \sc\sloppy
         \begin{minipage}{3in}
         \sloppy
-        A thesis submitted in partial fulfillment of the requirements of the Council of the \@thesisuni \  for the degree of \@thesisdegreelong \  (\@thesisdegree).
+        A thesis submitted in partial fulfillment of the requirements of the Council of \@thesisuni \  for the degree of \@thesisdegreelong \  (\@thesisdegree).
         \end{minipage}
         \\[2ex]
         \@thesisdate
