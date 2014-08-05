@@ -1,0 +1,26 @@
+This thesis style is based on Durham University's guidelines and
+British Standards 4821:1990 sections 4, 7 and 12.
+
+
+(i)   The paper size is A4 and printed single-sided.
+(ii)  At least 20 mm margins should be left all round EXCEPT the left-hand 
+      margin of 40 mm to allow for binding.
+(iii) Double or 1.5 spacing should be used throughout EXCEPT for indented
+      quotations or footnotes, where single spacing is adequate.
+
+Most of the other guidelines are/can be achieved automatically via the various
+LaTeX tools like BiBTeX.
+
+To save typing of bibliographic entries in BiBTeX format, I type in an old
+reference format having '%A' for author etc... To convert this into bibtex 
+format i use refer2bibtex.pl.0.9.0 running on PERL 4.0. I don't know
+if this perl program will run/function with perl 5.x. As it did not run 
+properly with my perl 5.000 version.
+
+In England/UK Academia have access to the bids database; on the web there are
+perl and C programs which mutate bids output into either bibtex style or reference style. Hence the need/use of refer2bibtex ! I think most of these are
+archived on the CTAN bibliography section (UK definitely - ftp.tex.ac.uk)
+
+--------------------------------- CUT HERE -------------------------------------
+
+

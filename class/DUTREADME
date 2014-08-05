@@ -1,0 +1,217 @@
+
+Use of LaTeX Durham University Thesis style.
+--------------------------------------------
+
+Files provided :-
+-----------------
+
+DUThesis.cls and DUTREADME (this file)
+------------     ---------
+
+Copyright (c) 1997 - J.R.Spanier
+
+DISCLAIMER:-	These files are released "as is", with no warranty expressed
+		or implied. This package is copyright 1997 by Jonathan Spanier.
+		Licence is granted for unlimited distribution and use, as long
+		as the following conditions are met :-
+
+		A. This notice is preserved intact.
+		B. No charge is made for the package (other than for a
+		   resonable distribution/duplication fee).
+		C. Any modifications must be documented in BOTH DUThesis.cls
+		   and DUTREADME files.
+
+		If you do decide to use this thesis style, an acknowledgement
+		to the LaTeX Community would be most welcome.
+
+BY:-
+	 Jonathan Spanier <J.R.Spanier@durham.ac.uk>
+	 University of Durham, England
+
+Based on the following:-
+
+	unswthesis.cls, uwthesis.cls, afthesis.cls,
+	duthesis.sty, suthesis.sty and mitthesis.sty
+
+AND
+	Is a superset of LaTeX 2e book.cls file. (book.cls must EXIST
+	in your distribution)
+
+	In `FLASH' mode, fancyheadings.sty (package) is used too !!
+
+AND
+
+     The LaTeX Companion book (highly recommended !!)
+
+AND for the TeX Guru's ...
+
+     The TeXbook by Donald E. Knuth
+
+--------------------------------------------------------------------------------
+
+BUGS:-
+------
+
+	listofsymbols and listofabbreviation pages may have formatting problems
+	when in draft mode. This appears as a black space character at the right	hand side margin.
+
+Extensions / TO DO:-
+--------------------
+
+	Add \qualifications command to print previous degrees in title page.
+	Add \partno, \totvol for multiple volume thesis support.
+	In `FLASH' mode, allow more inter-letter spacing in the "chapter",
+	 either by using the linespace package or magnifing the font.
+	Overcome any bugs / future bugs
+	Improve LaTeX 2e style.
+
+--------------------------------------------------------------------------------
+
+
+DUThesis supported options are :-
+----------------------------------
+
+As always, options may be placed before the {DUThesis}.  In this case,
+the following options are supported:
+
+       singlespacing   - Single-space the document (ie, do not apply the
+                         thesis requirements).
+       doublespacing   - Double-space the document (actually, space it
+                         1.21 times the baseline).
+       draft           - Prints the word "DRAFT" across the front page,
+                         as well as on each page (in the footer).
+       final           - Opposite of draft: do not print "DRAFT".
+
+       normal          - Standard (Boring) book presentation. (DEFAULT)
+
+       flash           - Classy presentation style. opposite to normal.
+
+All of the options for the Book class are also supported, namely,
+       10pt, 11pt, 12pt             (11pt is used by default)
+       letterpaper, legalpaper,
+       executivepaper, a4paper,
+       a5paper, b5paper             (a4paper used by default)
+       landscape                    (not used by default)
+       oneside, twoside             (oneside used by default)
+       openright, openany           (openany used by default)
+       onecolumn, twocolumn         (onecolumn used by default)
+       openbib                      (not used by default)
+       leqn, fleqn                  (not used by default)
+
+
+Latex 2.09 backward compatable (one hopes) style file :-
+---------------------------------------------------------
+
+%% DUThesis.sty <Backward Compatability> and UNTESTED
+%%
+\NeedsTeXFormat{LaTeX2e}
+\@obsoletefile{DUThesis.cls}{DUThesis.sty}
+\LoadClass{DUThesis}
+\endinput
+%%
+%% End of file `DUThesis.sty'.
+
+--------------------------------------------------------------------------------
+
+ Top-Level LaTeX file ....
+ -------------------------
+
+% NOTE :- Thesis class file LOADS/USES fancyheadings !!
+
+\documentclass[<options>]{DUThesis}
+\usepackage[<optional options>]{<other pacages/style files}
+
+% Essential declarations
+
+\thesistitle{A thesis for the poor}
+\thesisauthor{Jonathan Spanier}
+\thesisdegree{Ph.D.}			% Default
+\thesisdegreelong{Doctor of Philosophy}	% Default
+\thesisuni{The University of Durham}	% Default
+\thesisschool{School of Engineering}	% Default
+\supervisorname{Supervisor:}		% Default <NOT USED IN STYLE>
+\assessorname{Assessor:}		% Default <NOT USED IN STYLE>
+\copyrightyear{\year}
+\thesisdate{\month \ \year}
+
+\begin{document}
+\frontmatter
+
+\maketitle
+
+\begin{abstract}
+	...
+\end{abstract}
+
+\copyrightpage
+
+\begin{acknowledgements}
+	...
+\end{acknowledgements}
+
+\begin{dedication}
+	...
+\end{dedication}
+
+\tableofcontents		% optional, but normally desirable !!
+\listoffigures			% All listof commands are optional
+\listoftables			% Hence use as required !!
+\listofabbreviations
+\listofsymbols
+
+\mainmatter
+
+\part{New Part}			% If you have no parts, don't use it !
+
+\chapter{Introduction}
+
+\section{A section}
+
+\subsection{Yep kust like normal!}
+
+\symbol{$f_{s}$}{Sampling rate} is set to $$4100$ Hz, providing the full CD like frequency rangs. 
+\abbreviation{VLSI}{Very Large Scale Integration} technologies provide cheap,
+cost effective approaches to improving our standard of living.
+
+% In both the \symbol and \abbreviation commands above the following will
+% be typeset within the chapter/sub section etc...
+%
+% $f_{s}$ is set to $44100$ Hz ....
+% VLSI technologies ...
+%
+% The data in the curly brackets will appear in the relevant .los or .loa
+% files which will need post sorting using the UNIX sort command.
+% Then when re LaTeX'ed, the lists will become alphabetical.
+
+	...
+
+\subsubsection*{Really, just like normal}
+
+	...
+
+\appendix			% Sets chapters to appendix mode
+\chapter{First Appendix}
+
+	...
+
+\bibliographystyle{unsrt}	% These two commands provide bibtex support
+\bibliography{thesis,article}
+
+% Alternatively if your MAD :-)
+
+\begin{thebibliography}
+\ssp				% sets single spaceing
+
+\bibitem{c1:data}
+
+``\book{Introduction to VLSI Systems}'',
+Addison Wesley
+
+\bibitem ...
+
+...
+
+\end{bibliography}
+
+\end{document}			% finish thesis !!
+
