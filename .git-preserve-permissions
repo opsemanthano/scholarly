@@ -1,6 +1,8 @@
 0600:::.git-preserve-permissions
 0600:::.git-preserve-times
 0600:::.gitignore
+0400:::bibtex-style/duthesis.bst
+0600:::bibtex-style/duthesis.dbj
 0600:::class/DUTREADME
 0600:::class/DUThesis.cls
 0600:::class/notes
