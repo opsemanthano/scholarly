@@ -2,6 +2,7 @@
 #
 # r2b : convert a refer database to a BiBTeX database
 # Copyright 1992, 1993 by Dana Jacobsen (jacobsd@cs.orst.edu)
+#                 1997 by Jonathan Spanier (J.R.Spanier@durham.ac.uk)
 #
 #version = "0.1.1";# 17 Apr 92  jacobsd  Wrote original version
 #version = "0.2.0";# 20 Apr 92  jacobsd  Added tib support
@@ -28,7 +29,9 @@
 #version = "0.8.3";#  5 Oct 92  jacobsd  parsedate, edition, movements
 #version = "0.8.4";#  8 Oct 92  jacobsd  added \s point size changing
 #version = "0.8.5";# 14 May 93  jacobsd  literals, parsename, font changing
-$version = "0.9.0";# 20 May 93  jacobsd  
+#version = "0.9.0";# 20 May 93  jacobsd  
+$version = "0.9.1";# 27 Apr 97  jrs      Stop Journal/Proceedings clash
+#					 e.g. Proc. of the IEEE, IEE Proc. G.
 #
 # todo: final debugging for release
 #
@@ -373,28 +376,33 @@ sub doentry {
   # fields we were given, and sometimes examine the field contents, to
   # determine what type of entry this is.
 
-  if ($entry{J} && !$entry{B}) {
+#  if ($entry{J} && !$entry{B}) {
+#
+# To restore Script to original form uncomment all #'s (LHS) in this block 
+# and delete these 4 hased lines and "if($entry{J}){" line below.
+#
+   if ($entry{J}) {
     $type = 'article';
     $_ = $entry{J};
-    if (/^proc\w*\.\s/i || /proceeding/i || /proc[.]?\s+of\s/i ||
-        /conference/i || /symposium/i || /workshop/i ) {
-      $type = 'inproceedings';
-      $entry{B} = $entry{J};
-      if ($entry{N}) {   # These should be %B Proc, %J Journal, but do anyway.
+#    if (/^proc\w*\.\s/i || /proceeding/i || /proc[.]?\s+of\s/i ||
+#        /conference/i || /symposium/i || /workshop/i ) {
+#      $type = 'inproceedings';
+#      $entry{B} = $entry{J};
+#      if ($entry{N}) {   # These should be %B Proc, %J Journal, but do anyway.
         # Hope they did "proceedings of ..., published as ..."
-        if (/^(.*)published\s+(in|as)\s+(.*)$/i) {
-          $entry{B} = $1;
-          $entry{J} = $3;
-          $entry{B} =~ s/,?\s*$//;
-        }
-        $entry{O} .= "Published as $entry{J}";
-        if ($entry{V}) { $entry{O} .= ", volume $entry{V}"; }
-        if ($entry{N}) { $entry{O} .= ", number $entry{N}"; }
-        delete $entry{V};
-        delete $entry{N};
-      }
-      delete $entry{J};
-    }
+#        if (/^(.*)published\s+(in|as)\s+(.*)$/i) {
+#          $entry{B} = $1;
+#          $entry{J} = $3;
+#          $entry{B} =~ s/,?\s*$//;
+#        }
+#        $entry{O} .= "Published as $entry{J}";
+#        if ($entry{V}) { $entry{O} .= ", volume $entry{V}"; }
+#        if ($entry{N}) { $entry{O} .= ", number $entry{N}"; }
+#        delete $entry{V};
+#        delete $entry{N};
+#      }
+#      delete $entry{J};
+#    }
   } elsif ($entry{B}) {
     $type = '';
     if ($entry{T}) {
