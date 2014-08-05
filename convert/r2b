@@ -1,8 +1,7 @@
-#!/usr/local/bin/perl4.0
+#!/usr/local/bin/perl
 #
 # r2b : convert a refer database to a BiBTeX database
-# Copyright 1992, 1993 by Dana Jacobsen (jacobsd@cs.orst.edu)
-#                 1997 by Jonathan Spanier (J.R.Spanier@durham.ac.uk)
+# Copyright 1992-1994 by Dana Jacobsen (dana@acm.org)
 #
 #version = "0.1.1";# 17 Apr 92  jacobsd  Wrote original version
 #version = "0.2.0";# 20 Apr 92  jacobsd  Added tib support
@@ -30,8 +29,9 @@
 #version = "0.8.4";#  8 Oct 92  jacobsd  added \s point size changing
 #version = "0.8.5";# 14 May 93  jacobsd  literals, parsename, font changing
 #version = "0.9.0";# 20 May 93  jacobsd  
-$version = "0.9.1";# 27 Apr 97  jrs      Stop Journal/Proceedings clash
-#					 e.g. Proc. of the IEEE, IEE Proc. G.
+#version = "0.9.1";# 20 May 93  jacobsd  revamped refer input section
+#version = "0.9.2";# 22 Oct 94  jacobsd  Changed to work with perl 5.000
+$version = "0.9.3";# 23 Dec 94  jacobsd  Fixed {} caps problem with Perl 5.
 #
 # todo: final debugging for release
 #
@@ -102,6 +102,37 @@ print " -- $tarr[2]:$tarr[1], $tarr[3] $tarrmon $tarr[5]\n";
 print "% r2b$convertcommand\n";
 print "%\n\n";
 
+# These are the accepted refer codes.
+#
+# let 0 be a valid identifier, but we ignore it.  EndNote Plus puts it
+# out as a type identifier, but it's often wrong.  We'll figure it out.
+# Organized these in likelihood order and get some speed improvement.
+# A: 21%, DT: 11.3%, P: 10%, K: 8.7%, V: 7.1%, J: 6.3%, ICB: 4.0%
+%allidents = ('A', ' and ',  'E', ' and ',  'Q', ' and ',
+              'X', "\n\n",
+              'D', ' ', 'T', ' ', 'P', ' ', 'K', ' ', 'V', ' ',
+              'J', ' ', 'I', ' ', 'C', ' ', 'B', ' ', 'N', ' ',
+              'S', ' ', 'L', ' ', 'R', ' ', 'O', ' ', '*', ' ',
+              'H', ' ', 'G', ' ', 'Y', ' ', 'M', ' ', 'U', ' ',
+              'Z', ' ', 'l', ' ', '$',
+              '0', ' ',
+             );
+
+# These are the fields that are required to be present for each BibTeX
+# type.  They will generate a syntax warning if they are not present.
+# AE means A or E, BT means B or T.
+%reqfields = ('article',       "A:T:J:Yr",
+              'book',          "AE:T:I:Yr",
+              'incollection',  "A:T:B:I:Yr",
+              'inproceedings', "A:T:B:Yr",
+              'mastersthesis', "A:T:Sch:Yr",
+              'phdthesis',     "A:T:Sch:Yr",
+              'proceedings',   "BT:Yr",
+              'techreport',    "A:T:Ins:Yr",
+              'unpublished',   "A:T:O",
+             );
+ 
+
 foreach $infile (@files) {
  open (IN, $infile) || ((warn "Can't open $infile: $!\n"), next);
  $linenum    = 0;
@@ -110,83 +141,70 @@ foreach $infile (@files) {
 
  if ($deroffonly) {
    while (<IN>) {
-     chop;
      $linenum++;
      $_ = &doibmtoroff($_) if $ibmconv;
      $_ = &dorofftotex($_) if $roffconv;
-     print $_, "\n";
+     print $_;
    }
-   exit 0;
+   next;
  }
 
  while (<IN>) {
-  chop;
   $linenum++;
 
-  /^\s*$/ && do { if ($lastfield) {
-                    &doentry();
-                    undef(%entry);
-                    undef($lastfield);
-                  }
-                  next;
-                };
+  if (/^%(.)\s*(.*)$/) {
+    $field = $1;
+    $rest = $2;
+    $lastfield = 0;
 
-  /^[^%]/ && do { if ($lastfield) {
-                    if ( ($lastfield eq X) || ($lastfield eq Y) ) {
-                      $entry{$lastfield} .= "\n" . $_;
-                    } else {
-                      $entry{$lastfield} .= " " . $_;
-                    }
-                  } else {
-                    print STDERR "line $linenum:";
-                    print STDERR "Line without field identifier: \n$_\n";
-                    $errors++;
-                  }
-                  next;
-                };
+    # A '#' as the first character of text is taken to be a comment.
+    next if ($rest =~ /^#/);
 
-  $lastfield = 0;
-  if (substr($_, 3, 1) eq '#')   { next; }     # comment
-  $field = substr($_, 1, 1);
+    # Convert 'o' and 'r' to O.  These are some of tib's translated fields,
+    # as well as typos, where they really meant O.
+    $field =~ s/[or]/O/;
 
-  #   Convert some lowercase fields to O.  Bibtex really doesn't have
-  # any way of dealing with tib's lower case ``translated'' fields.
-  #   Most of the lower case fields in my experience are usually typos.
-  #   Abstracts, contents, and comments seem to be non-standard.  I have 
-  # assumed %X for abstract and %Y for contents.
-  #   Refer, tib, and bib seem to have their own styles, and usually
-  # people add on fields anyway.  This is reaching the limits of what I
-  # can handle even by hand-translating.
+    #   Abstracts, contents, and comments seem to be non-standard.  I have 
+    # assumed %X for abstract and %Y for contents.
+    #   Refer, tib, and bib seem to have their own styles, and usually
+    # people add on fields anyway.  This is reaching the limits of what I
+    # can handle even by hand-translating.
+    $lastfield = $field;
 
-  ($field =~ /^[or]$/) && do { $field = "O"; };
+    # A '%' as the field is taken to be a comment.
+    next if ($field eq '%');
+    # HEY!  check this:  '\' or '\\' ?
+    if ($field eq '\\') {
+      print q/@preamble{ "/, substr($_, 1), qq/" }\n/;
+      next;
+    }
 
-  $lastfield = $field;
-  if ($field eq '%')             { next; }     # comment
-  $rest = substr($_, 3);
-
-  if ($field eq "\\") {
-    print q/@preamble{ "/, substr($_, 1), qq/" }\n/;
-    next;
-  }
-
-  if ( ($field eq A) || ($field eq Q) || ($field eq E) ) {
-    $entry{$field} .= " and " . $rest;
-  } elsif ( ($field eq X) ) {
-    $entry{$field} .= "\n\n" . $rest;
+    if (defined $allidents{$field}) {
+      $entry{$field} = join($allidents{$field}, $entry{$field}, $rest);
+    } else {
+      &anerror("Unknown field identifier: $_");
+    }
   } else {
-    $entry{$field} .= " " . $rest;
+    if ( /^\s*$/ ) {
+      &doentry() if $lastfield;
+      %entry = ();
+      $lastfield = '';
+    } else {
+      chop;
+      if ( $lastfield) {
+        if ( $lastfield =~ /X|Y/) {
+          $entry{$lastfield} .= "\n" . $_;
+        } else {
+          $entry{$lastfield} .= " " . $_;
+        }
+      } else {
+        print STDERR "line $linenum:";
+        print STDERR "Line without field identifier: \n$_\n";
+        $errors++;
+      }
+    }
   }
 
-  # let 0 be a valid identifier, but we ignore it.  EndNote Plus puts it
-  # out as a type identifier, but it's often wrong.  We'll figure it out.
-
-#  $allindents = "ABCDEGHIJKLMNOPQRSTUVXYZ0l*$";
-#  organize these in likelihood order and get some speed improvement.
-#  A: 21%, DT: 11.3%, P: 10%, K: 8.7%, V: 7.1%, J: 6.3%, ICB: 4.0%
-  $allindents = "ADTPKVJICBNESL0XRO*HGYMQUZl$";
-  if (index($allindents, $field) == -1) {
-    &anerror("Unknown field identifier: $_");
-  }
  }
 
  if (%entry) {
@@ -260,13 +278,14 @@ sub doentry {
   }
 
   # Look for "* Edition" in some fields and move to Ed field
-  foreach $field (O,R,S,V,T,B) {
+  foreach $field (V,S,R,T,O,B) {
     if ($entry{$field} =~ /([\w\d]+)\s+edition/i) {
       $entry{Ed} = $1;
       $entry{$field} =~ s/\s*[-,;(]?\s*([\w\d]+)\s+edition\s*[),;]?\s*//i;
       if ($entry{$field} =~ /^\s*$/) {
         delete $entry{$field};
       }
+      last;
     }
   }
 
@@ -321,10 +340,10 @@ sub doentry {
   if ($entry{T}) {
     if ($capprotect == 1) {
       1 while $entry{T} =~ 
-               s/([^{\\\w]|^)([A-Z]+)([^{}\\\w]|$)/$1{$2}$3/g;
-      $entry{T} =~ s/^{([A-Z])}/$1/;
+               s/([^{\\\w]|^)([A-Z]+)([^\{\}\\\w]|$)/$1\{$2\}$3/g;
+      $entry{T} =~ s/^\{([A-Z])\}/$1/;
     } elsif ($capprotect == 2) {
-      $entry{T} =~ s/([A-Z]+)/{$1}/g;
+      $entry{T} =~ s/([A-Z]+)/\{$1\}/g;
     }
   }
 
@@ -372,37 +391,32 @@ sub doentry {
   &genkey();
 
   # determine the Entry Type
-  # This is where the heuristics come into play.  We need to examine what
-  # fields we were given, and sometimes examine the field contents, to
+  # This is where the heuristics really come into play.  We need to examine
+  # what fields we were given, and occasionally the field contents, to
   # determine what type of entry this is.
 
-#  if ($entry{J} && !$entry{B}) {
-#
-# To restore Script to original form uncomment all #'s (LHS) in this block 
-# and delete these 4 hased lines and "if($entry{J}){" line below.
-#
-   if ($entry{J}) {
+  if ($entry{J} && !$entry{B}) {
     $type = 'article';
     $_ = $entry{J};
-#    if (/^proc\w*\.\s/i || /proceeding/i || /proc[.]?\s+of\s/i ||
-#        /conference/i || /symposium/i || /workshop/i ) {
-#      $type = 'inproceedings';
-#      $entry{B} = $entry{J};
-#      if ($entry{N}) {   # These should be %B Proc, %J Journal, but do anyway.
+    if (/^proc\w*\.\s/i || /proceeding/i || /proc[.]?\s+of\s/i ||
+        /conference/i || /symposium/i || /workshop/i ) {
+      $type = 'inproceedings';
+      $entry{B} = $entry{J};
+      if ($entry{N}) {   # These should be %B Proc, %J Journal, but do anyway.
         # Hope they did "proceedings of ..., published as ..."
-#        if (/^(.*)published\s+(in|as)\s+(.*)$/i) {
-#          $entry{B} = $1;
-#          $entry{J} = $3;
-#          $entry{B} =~ s/,?\s*$//;
-#        }
-#        $entry{O} .= "Published as $entry{J}";
-#        if ($entry{V}) { $entry{O} .= ", volume $entry{V}"; }
-#        if ($entry{N}) { $entry{O} .= ", number $entry{N}"; }
-#        delete $entry{V};
-#        delete $entry{N};
-#      }
-#      delete $entry{J};
-#    }
+        if (/^(.*)published\s+(in|as)\s+(.*)$/i) {
+          $entry{B} = $1;
+          $entry{J} = $3;
+          $entry{B} =~ s/,?\s*$//;
+        }
+        $entry{O} .= "Published as $entry{J}";
+        if ($entry{V}) { $entry{O} .= ", volume $entry{V}"; }
+        if ($entry{N}) { $entry{O} .= ", number $entry{N}"; }
+        delete $entry{V};
+        delete $entry{N};
+      }
+      delete $entry{J};
+    }
   } elsif ($entry{B}) {
     $type = '';
     if ($entry{T}) {
@@ -495,34 +509,36 @@ sub doentry {
   }
 
 
-  # Change things around for each types
-  $_ = $type;
+  # Change things around for some types
+  if ( ($type eq 'mastersthesis') || ($type eq 'phdthesis') ) {
+    $entry{Sch} = $entry{Ins};
+    delete $entry{Ins};
+  } elsif ($type eq 'unpublished') {
+    $entry{O} .= $entry{Ins};
+    delete $entry{Ins};
+  }
 
-  /^mastersthesis/ && do { $entry{Sch} = $entry{Ins}; delete $entry{Ins}; };
-  /^phdthesis/     && do { $entry{Sch} = $entry{Ins}; delete $entry{Ins}; };
-  /^unpublished/   && do { $entry{O} .= $entry{Ins}; delete $entry{Ins}; };
-
-  # Syntax checking
-
-  /^article/       && (&syntax(A, T, J, Yr));
-  /^book/          && (&syntax(AE, T, I, Yr));
-  /^incollection/  && (&syntax(A, T, B, I, Yr));
-  /^inproceedings/ && (&syntax(A, T, B, Yr));
-  /^mastersthesis/ && (&syntax(A, T, Sch, Yr));
-  /^phdthesis/     && (&syntax(A, T, Sch, Yr));
-  /^proceedings/   && (&syntax(BT, Yr));
-  /^techreport/    && (&syntax(A, T, Ins, Yr));
-  /^unpublished/   && (&syntax(A, T, O));
+  # Check for required fields
+  foreach $field ( split(/:/, $reqfields{$type}) ) {
+    if ($field eq AE) {
+      $entry{A} || $entry{E} ||
+                   &anerror("Missing A and E (Author and Editor) fields.");
+    } elsif ($field eq BT) {
+      $entry{B} || $entry{T} || &anerror("Missing T (Title) field.");
+    } else {
+      $entry{$field} || &anerror("Missing $field field.");
+    }
+  }
 
   # set up the entry output string
 
   $ent = '';
-  $ent .= "@$type\{$key,\n";
+  $ent .= "\@$type\{$key,\n";
 
   if ($entry{Key}) { $ent .= "   key = \{$entry{Key}\},\n"; }
   if ($entry{A})   { $ent .= "   author = \{$entry{A}\},\n"; }
   if ($entry{E})   { $ent .= "   editor = \{$entry{E}\},\n"; }
-  if ($entry{T})   { $ent .= "   title = \{$entry{T}\},\n"; }
+  if ($entry{'T'})   { $ent .= "   title = \{$entry{'T'}\},\n"; }
   if ($entry{B})   {
     if ($entry{T}) {
                      $ent .= "   booktitle = \{$entry{B}\},\n";
@@ -547,7 +563,7 @@ sub doentry {
   if ($entry{'*'}) { $ent .= "   copyright = \{$entry{'*'}\},\n"; }
   if ($entry{K})   { $ent .= "   keywords = \{$entry{K}\},\n"; }
   if ($entry{M})   { $ent .= "   mrnumber = \{$entry{M}\},\n"; }
-  if ($entry{l})   { $ent .= "   language = \{$entry{l}\},\n"; }
+  if ($entry{'l'}) { $ent .= "   language = \{$entry{'l'}\},\n"; }
   if ($entry{U})   { $ent .= "   annote = \{$entry{U}\},\n"; }
   if ($entry{ISBN}){ $ent .= "   ISBN = \{$entry{ISBN}\},\n"; }
   if ($entry{ISSN}){ $ent .= "   ISSN = \{$entry{ISSN}\},\n"; }
@@ -607,7 +623,7 @@ sub parsedate {
     $entry{YrKey} = "????";
   }
   $entry{Decade} = substr($entry{YrKey}, 2, 2);
-  if (length($date) == 0) { return; }
+  return unless length($date);
 
   $_ = $date;
   if (!/[-\d]/) {
@@ -656,7 +672,7 @@ sub genkey {
     $name = $entry{Key_A} || $entry{Key_Q} || $entry{Key_E}
             || $entry{Key_I} || $noadd || "Anonymous";
 
-    $name = sprintf("%.${maxllength}s", $name);
+    $name = substr($name,0,$maxllength);
     $key = $name . $entry{Decade};
   }
 
@@ -676,14 +692,13 @@ sub genkey {
     }
   }
 
-  if ($noadd) {
-    return($key);
+  if (!$noadd) {
+    $allkeys{$lkey} = $key;
+    if ($name eq "Anonymous") {
+      $entry{Key} = $key;
+    }
   }
-
-  $allkeys{$lkey} = $key;
-  if ($name eq "Anonymous") {
-    $entry{Key} = $key;
-  }
+  $key;
 }
 
 
@@ -695,15 +710,14 @@ sub genkey {
 # It does not handle names in "last, first" format.
 # it returns a key (last name of author or editor, first name of corp).
 # It sets $fname to the full bibtex name.
-# It sets $editors, $authors, or $corpauthors if it thinks the name is one.
+# It sets $editors or $corpauthors if it thinks the name is one.
 #
 sub parsename {
   local($allnames, $ntype) = @_;
   local($firstn, $vonn, $lastn, $jrn);
   local(@names, $keyn, $oname, $nname, $rest);
  
-  undef $fname;
-  $editors = $authors = $corpauthors = 0;
+  $editors = $corpauthors = "";
 
   # handle unpaddable spaces (\ ) in names as if they were ties (\0)
   $allnames =~ s/\\ /~/g;     # the ties (~) get converted back later.
@@ -725,6 +739,7 @@ sub parsename {
     $name =~ tr/A-Za-z0-9\/\-//cd;
     return $name;
   }
+  $fname = "";
   while (@names) {
     $oname = $name = shift @names;
     $firstn = $vonn = $lastn = '';
@@ -821,32 +836,9 @@ sub parsename {
       &anerror("Corporate Author (%Q) in %E.");
     }
   }
-
-  return $keyn;
+  $keyn;
 }
 
-
-
-##########################################
-# syntax does syntax checking
-#
-sub syntax {
-  foreach $field (@_) {
-    if ($field eq AE) {
-      if ( (!$entry{A}) && (!$entry{E}) ) {
-        &anerror("Missing A and E (Author and Editor) fields.");
-      }
-    } elsif ($field eq BT) {
-      if ( (!$entry{B}) && (!$entry{T}) ) {
-        &anerror("Missing T (Title) field.");
-      }
-    } else {
-      if (!$entry{$field}) {
-        &anerror("Missing $field field.");
-      }
-    }
-  }
-}
 
 
 
@@ -1331,7 +1323,7 @@ sub dorofftotex {
     s#\\\*d\-#_h_Booalign_L_Mpartial_D_Bcrcr\n_Bhskip.55ex_Braise.7ex_H-_R_Bhfil_R_R#g;
     s#\\\*\(([AO])e#_C$1E_R#g;               # \*(Ae -> {\AE}
     s#\\\*\(([ao])e#_C$1e_R#g;               # \*(ae -> {\ae}
-    s#\\\*q#_Cc_Lo_R_R#g;                    # \*q   -> {\c{o}}
+    s#\\\*q#_Cc_Lo_R_R#g;                    # \*q   -> {\c{o}}  # wrong
 
     # International (Roman-8) symbols
 
@@ -1410,7 +1402,7 @@ sub dorofftotex {
     s#\\\(a~#_C_T_L _R_R#g;                  # \(a~  -> {\~{ }}
     s#\\\(ho#_Cc_L _R_R#g;                   # \(ho  -> {\c{ }}  # (wrong!)
     s#\\\(\.([ij])#_C$1_R#g;                 # \(.i  -> {\i}
-    s#\\\(Do#$#g;                            # \(Do  -> $
+    s#\\\(Do#\$#g;                           # \(Do  -> $
     s#\\\(Po#_Cpounds_R#g;                   # \(Po  -> {\pounds}
     s#\\\(Ye#_h_Brm_Brlap=Y_R#g;             # \(Ye  -> \hbox{\rm\rlap=Y}
     s#\\\(Fo#_Mscriptscriptstyle_Bll_D#g;    # \(Fo  -> $\scriptscriptstyle\ll$
@@ -1494,29 +1486,29 @@ sub dorofftotex {
     local ($oldline);
     # print STDERR "\nfrom: $_\n" if /@.*@/;
     # replace  @blah $\foo$ bar@   with   @blah \foo bar@
-    1 while s/@([^@]* su[bp] [^@]*)_M([^@]*)_D([^@]*)@/@$1_B$2$3@/g;
-    1 while s/@([^@]*)_M([^@]*)_D([^@]* su[bp] [^@]*)@/@$1_B$2$3@/g;
-    while (/@.*@/) {
+    1 while s/\@([^@]* su[bp] [^@]*)_M([^@]*)_D([^@]*)\@/\@$1_B$2$3\@/g;
+    1 while s/\@([^@]*)_M([^@]*)_D([^@]* su[bp] [^@]*)\@/\@$1_B$2$3\@/g;
+    while (/\@.*\@/) {
       $oldline = $_;
-      s/@\s*roman\s+([^@]*)@/@$1@/g;
-      s/@\s*{\s*([^\s@]+)\s*sub\s+([^\s@]+)\s*}\s*sup\s+([^\s@]+)\s*([^@]*)@/_L_D_Crm_S$1_R__L$2_R_A_L$3_R_D_R@$4@/g;
-      s/@\s*([^\s@]+)\s*sub\s+([^\s@]+)\s*([^@]*)@/_L_D_Crm_S$1_R__L$2_R_D_R@$3@/g;
-      s/@\s*([^\s@]+)\s*sup\s+([^\s@]+)\s*([^@]*)@/_L_D_Crm_S$1_R_A_L$2_R_D_R@$3@/g;
+      s/\@\s*roman\s+([^\@]*)\@/\@$1\@/g;
+      s/\@\s*{\s*([^\s@]+)\s*sub\s+([^\s@]+)\s*}\s*sup\s+([^\s@]+)\s*([^@]*)\@/_L_D_Crm_S$1_R__L$2_R_A_L$3_R_D_R\@$4\@/g;
+      s/\@\s*([^\s@]+)\s*sub\s+([^\s@]+)\s*([^@]*)@/_L_D_Crm_S$1_R__L$2_R_D_R\@$3\@/g;
+      s/\@\s*([^\s@]+)\s*sup\s+([^\s@]+)\s*([^@]*)@/_L_D_Crm_S$1_R_A_L$2_R_D_R\@$3\@/g;
       s/_L_D_Crm_S""_R/_L_D_L_R/g;   # handle @ "" sub 18 @
-      s/@mu@/_Mmu_D/g;
-      s/@angstrom@/_CAA_R/g;
-      s/@co2@/@CO sub 2@/g;
-      s/@no2@/@NO sub 2@/g;
-      s/@nox@/@NO sub x@/g;
-      s/@n2@/@N sub 2@/g;
-      s/@so2@/@SO sub 2@/g;
-      s/@so4@/@{SO sub 4} sup 2-@/g;
-      s/@no3@/@{NO sub 3} sup -@/g;
-      s/@hno3@/@HNO sub 3@/g;
+      s/\@mu\@/_Mmu_D/g;
+      s/\@angstrom\@/_CAA_R/g;
+      s/\@co2\@/\@CO sub 2\@/g;
+      s/\@no2\@/\@NO sub 2\@/g;
+      s/\@nox\@/\@NO sub x\@/g;
+      s/\@n2\@/\@N sub 2\@/g;
+      s/\@so2\@/\@SO sub 2\@/g;
+      s/\@so4\@/\@{SO sub 4} sup 2-\@/g;
+      s/\@no3\@/\@{NO sub 3} sup -\@/g;
+      s/\@hno3\@/\@HNO sub 3\@/g;
       if ($oldline eq $_) {
-        s/@\s*([^\s@]+)\s*([^@]*)@/_L$1_R@$2@/g;
+        s/\@\s*([^\s@]+)\s*([^@]*)\@/_L$1_R\@$2\@/g;
       }
-      s/@\s*@//g;
+      s/\@\s*\@//g;
       # print STDERR "  to: $_\n";
     }
   }
@@ -1525,21 +1517,21 @@ sub dorofftotex {
   if ($protectTeX) {
     s/\\/_I/g;
     s/#/\\#/g;
-    s/\$/\\$/g;
+    s/\$/\\\$/g;
     s/%/\\%/g;
     s/&/\\&/g;
     s/{/_D\\lbrace_D/g;
     s/}/_D\\rbrace_D/g;
-    s/\|/$|$/g;
-    s/</\$<$/g;
-    s/>/\$>$/g;
+    s/\|/\$|\$/g;
+    s/</\$<\$/g;
+    s/>/\$>\$/g;
     s/\^/\\^{}/g;
     s/~/\\~{}/g;
   }
 
   # now convert our escaped characters back to their real selves
   s/_B/\\/g;
-  s/_I/\$\\backslash$/g;
+  s/_I/\$\\backslash\$/g;
   s/_C/{\\/g;
   s/_S/ /g;
   s/_L/{/g;
@@ -1548,7 +1540,7 @@ sub dorofftotex {
   s/_g/>/g;
   s/_T/~/g;
   s/_A/^/g;
-  s/_D/$/g;
+  s/_D/\$/g;
   s/_M/\$\\/g;
   s/_V/|/g;
   s/_E/\${}^/g;
@@ -1556,7 +1548,7 @@ sub dorofftotex {
   s/_h/\\leavevmode\n\\hbox{/g;
   s/_U/\\_/g;
   s/\n\n/\\par\n/g;           # this is for fields that want paragraphs
-  return $_;
+  $_;
 }
 
 ##########################################
@@ -1642,6 +1634,6 @@ sub doibmtoroff {
     s/[\376]/\\\(Re/g;
   }
  
-  return $_;
+  $_;
 }
 
