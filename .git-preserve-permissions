@@ -6,6 +6,8 @@
 0600:::class/DUTREADME
 0600:::class/DUThesis.cls
 0600:::class/notes
+0600:::convert/biblist.sty
+0700:::convert/printbib
 0400:::convert/r2b
 0700:::create
 0600:::pub2html/Abstracts.html

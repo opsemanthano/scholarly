@@ -1,0 +1,62 @@
+#!/bin/csh -f
+#
+# printbib - print a full bibtex bib file out
+#
+# David Kotz
+#
+# usage:
+#  printbib bibfile...
+#
+# Then send the dvi file 'abstract.dvi' to the printer
+# (usage varies; try lpr -d abstract.dvi)
+
+if ($#argv == 0) then
+	   echo usage: printbib bibfile...
+	   exit 1
+endif
+
+if ($1:e == "bib") then
+	   set files=($1:r)
+else
+	   set files=($1)
+endif
+
+shift
+foreach f ($*)
+	   if ($f:e == "bib") then
+	   	   set files="$files,$f:r"
+	   else
+	   	   set files="$files,$f"
+	   endif
+end
+
+echo creating abstract.tex for $files
+
+cat > abstract.tex <<EOF
+%\documentclass[twocolumn]{article}
+\documentclass{article}
+\usepackage{a4}
+\usepackage{biblist}
+%\usepackage{bibmods}
+%\usepackage{bibnames}
+%\usepackage{showtags}
+
+\begin{document}
+\begin{center}
+\today
+\end{center}
+%\nocite{*}
+\bibliographystyle{alpha}
+%\bibliographystyle{ieeetr}
+\bibliography{$files}
+%\bibliography{papers,morepapers,misc}
+\end{document}
+EOF
+
+rm -f abstract.{aux,log,dvi,bbl,blg}
+
+set echo 
+latex abstract.tex
+bibtex abstract
+latex abstract.tex
+latex abstract.tex
