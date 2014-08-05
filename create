@@ -1,0 +1,8 @@
+#!/bin/csh -f
+latex thesis
+bibtex thesis
+latex thesis
+latex thesis
+sort thesis.loa >thesis$$
+mv -f thesis$$ thesis.loa
+latex thesis
