@@ -1,0 +1,1639 @@
+#!/usr/local/bin/perl4.0
+#
+# r2b : convert a refer database to a BiBTeX database
+# Copyright 1992, 1993 by Dana Jacobsen (jacobsd@cs.orst.edu)
+#
+#version = "0.1.1";# 17 Apr 92  jacobsd  Wrote original version
+#version = "0.2.0";# 20 Apr 92  jacobsd  Added tib support
+#version = "0.3.0";# 21 Apr 92  jacobsd  Rewrote heuristics
+#version = "0.4.0";# 22 Apr 92  jacobsd  Revamped the rofftotex stuff
+#version = "0.5.2";# 24 Apr 92  jacobsd  some cleanup
+#version = "0.6.0";# 25 Apr 92  jacobsd  understands names
+#version = "0.6.1";# 26 Apr 92  jacobsd  cleanup
+#version = "0.6.2";# 27 Apr 92  jacobsd  added support for a few more fields
+#version = "0.6.3";# 27 Apr 92  jacobsd  little more tib support
+#version = "0.6.4";# 27 Apr 92  jacobsd  added Roman-8 chars and more options
+#version = "0.6.5";# 27 Apr 92  jacobsd  integrated error routine
+#version = "0.7.0";#  2 May 92  jacobsd  added groff chars and fixed bugs
+#version = "0.7.1";#  2 May 92  jacobsd  fixed a few more things
+#version = "0.7.2";# 10 Aug 92  jacobsd  changed key generation
+#version = "0.7.3";# 16 Aug 92  jacobsd  added ISBN, 2 overstrikes, -q
+#version = "0.7.4";# 19 Aug 92  jacobsd  overstrike, changes for proceedings
+#version = "0.7.5";# 20 Aug 92  jacobsd  efficiency moves, month abbrevs
+#version = "0.7.6";# 29 Aug 92  jacobsd  added eqn flag
+#version = "0.7.7";#  2 Sep 92  jacobsd  changed name, edition, report parsing
+#version = "0.8.0";#  4 Sep 92  jacobsd  added date and option field to header
+#version = "0.8.1";#  7 Sep 92  jacobsd  added ibm option, corrected ms macros
+#version = "0.8.2";#  5 Oct 92  jacobsd  fixed -ms/-mm macro confusion (again)
+#version = "0.8.3";#  5 Oct 92  jacobsd  parsedate, edition, movements
+#version = "0.8.4";#  8 Oct 92  jacobsd  added \s point size changing
+#version = "0.8.5";# 14 May 93  jacobsd  literals, parsename, font changing
+$version = "0.9.0";# 20 May 93  jacobsd  
+#
+# todo: final debugging for release
+#
+# All bug-fixes, suggestions, flames, and compliments gladly accepted.
+#
+
+# These are site selected.
+#
+$maxflength = 2950;  # Bibtex doesn't want lines longer than this.
+$maxllength = 14;    # maximum length of the text in a label (plus decade)
+$prcontents = 0;     # print the contents (%Y) field.
+
+# These are the program defaults that can be changed by command line options.
+#
+$roffconv   = 1;   # -n          : no roff-to-tex conversion
+$ibmconv    = 0;   # -ibm        : convert ibm graphics characters
+$nowarnings = 0;   # -q          : don't print warnings
+$tibfmt     = 0;   # -tib        : tib bibliography format
+$overstrike = 0;   # -overstrike : allow \:o = \(:o.  European troff??
+$handleeqn  = 0;   # -eqn        : handle some eqn @@ delimited constructs
+$ignorelabel= 0;   # -ignorelabel: don't use L field for citekey
+$deroffonly = 0;   # -deroff-only
+$protectTeX = 1;   # -noprotect  : don't protect TeX special characters
+$nameconv   = 1;   # -noname-conv
+$revauthor  = 0;   # -reverse-author
+$capprotect = 1;   # -nocap-protect = 0. -cap-protect = 2.
+
+$convertcommand = '';
+$toterrors = 0;
+
+while (@ARGV) {
+  $_ = shift @ARGV;
+  $convertcommand .= ' ' . $_;
+  /^--$/  && do { push(@files, @ARGV); undef @ARGV; next; };
+  /^-n$/  && do { $roffconv = 0;    next; };
+  /^-ibm/ && do { $ibmconv = 1;     next; };
+  /^-q$/  && do { $nowarnings = 1;  next; };
+  /^-qq$/ && do { $nowarnings = 2;  next; };   # this turns off ALL messages
+  /^-tib/ && do { $tibfmt = 1;      next; };
+  /^-ove/ && do { $overstrike = 1;  next; };
+  /^-eqn/ && do { $handleeqn = 1;   next; };
+  /^-der/ && do { $deroffonly = 1;  next; };
+  /^-non/ && do { $nameconv = 0;    next; };
+  /^-rev/ && do { $revauthor = 1;   next; };
+  /^-noc/ && do { $capprotect = 0;  next; };
+  /^-cap/ && do { $capprotect = 2;  next; };
+  /^-ign/ && do { $ignorelabel = 1; next; };
+  /^-nop/ && do { $protectTeX = 0;  next; };
+  push (@files, $_);
+}
+
+if ($#files == -1) {
+  push (@files, "-");
+}
+
+print "%\n";
+print "% converted from ", ($tibfmt ? "tib" : "refer");
+print " format by refer-to-bibtex $version";
+@tarr = localtime(time);
+# convert month from numeric to textual
+$tarrmon = (Jan, Feb, Mar, Apr, May, Jun, Jul, Aug,
+            Sep, Oct, Nov, Dec)[$tarr[4]];
+# add a leading 0 if the minute is only 1 digit.
+$tarr[1] = '0' . $tarr[1] if length($tarr[1]) == 1;
+# print date in format "21:09, 4 Sep 92"
+print " -- $tarr[2]:$tarr[1], $tarr[3] $tarrmon $tarr[5]\n";
+# print the command line as they entered it, so we know special options
+print "% r2b$convertcommand\n";
+print "%\n\n";
+
+foreach $infile (@files) {
+ open (IN, $infile) || ((warn "Can't open $infile: $!\n"), next);
+ $linenum    = 0;
+ $lastfield  = 0;
+ $errors     = 0;
+
+ if ($deroffonly) {
+   while (<IN>) {
+     chop;
+     $linenum++;
+     $_ = &doibmtoroff($_) if $ibmconv;
+     $_ = &dorofftotex($_) if $roffconv;
+     print $_, "\n";
+   }
+   exit 0;
+ }
+
+ while (<IN>) {
+  chop;
+  $linenum++;
+
+  /^\s*$/ && do { if ($lastfield) {
+                    &doentry();
+                    undef(%entry);
+                    undef($lastfield);
+                  }
+                  next;
+                };
+
+  /^[^%]/ && do { if ($lastfield) {
+                    if ( ($lastfield eq X) || ($lastfield eq Y) ) {
+                      $entry{$lastfield} .= "\n" . $_;
+                    } else {
+                      $entry{$lastfield} .= " " . $_;
+                    }
+                  } else {
+                    print STDERR "line $linenum:";
+                    print STDERR "Line without field identifier: \n$_\n";
+                    $errors++;
+                  }
+                  next;
+                };
+
+  $lastfield = 0;
+  if (substr($_, 3, 1) eq '#')   { next; }     # comment
+  $field = substr($_, 1, 1);
+
+  #   Convert some lowercase fields to O.  Bibtex really doesn't have
+  # any way of dealing with tib's lower case ``translated'' fields.
+  #   Most of the lower case fields in my experience are usually typos.
+  #   Abstracts, contents, and comments seem to be non-standard.  I have 
+  # assumed %X for abstract and %Y for contents.
+  #   Refer, tib, and bib seem to have their own styles, and usually
+  # people add on fields anyway.  This is reaching the limits of what I
+  # can handle even by hand-translating.
+
+  ($field =~ /^[or]$/) && do { $field = "O"; };
+
+  $lastfield = $field;
+  if ($field eq '%')             { next; }     # comment
+  $rest = substr($_, 3);
+
+  if ($field eq "\\") {
+    print q/@preamble{ "/, substr($_, 1), qq/" }\n/;
+    next;
+  }
+
+  if ( ($field eq A) || ($field eq Q) || ($field eq E) ) {
+    $entry{$field} .= " and " . $rest;
+  } elsif ( ($field eq X) ) {
+    $entry{$field} .= "\n\n" . $rest;
+  } else {
+    $entry{$field} .= " " . $rest;
+  }
+
+  # let 0 be a valid identifier, but we ignore it.  EndNote Plus puts it
+  # out as a type identifier, but it's often wrong.  We'll figure it out.
+
+#  $allindents = "ABCDEGHIJKLMNOPQRSTUVXYZ0l*$";
+#  organize these in likelihood order and get some speed improvement.
+#  A: 21%, DT: 11.3%, P: 10%, K: 8.7%, V: 7.1%, J: 6.3%, ICB: 4.0%
+  $allindents = "ADTPKVJICBNESL0XRO*HGYMQUZl$";
+  if (index($allindents, $field) == -1) {
+    &anerror("Unknown field identifier: $_");
+  }
+ }
+
+ if (%entry) {
+  &doentry();
+ }
+
+ foreach $type (sort keys(%number)) {
+  ($nowarnings < 2) && printf STDERR "%5d %s\n", $number{$type}, $type;
+  $totalentries += $number{$type};
+ }
+
+ if ($nowarnings < 2) {
+   print STDERR "$totalentries entries, ";
+   $errors == 0 ? print STDERR "no error" : print STDERR "$errors error";
+   $errors == 1 ? print STDERR "\n" : print STDERR "s\n";
+ }
+ $toterrors += $errors;
+}
+
+exit $toterrors;
+
+
+
+
+##########################################
+#
+sub doentry {
+
+# do some processing on each field
+
+  foreach $field (keys(%entry)) {
+    $entry{$field} =~ s/^\s+//;
+    $entry{$field} =~ s/\s+$//;
+
+    $entry{$field} = &doibmtoroff($entry{$field}) if $ibmconv;
+    $entry{$field} = &dorofftotex($entry{$field}) if $roffconv;;
+
+    if (length($entry{$field}) > $maxflength) {
+      $entry{$field} = substr($entry{$field}, 0, $maxflength-3);
+      $entry{$field} .= "...";
+      &anerror("field %$field longer than $maxflength characters.");
+    }
+    #$entry{$field} =~ s/(^|[^\\])~/$1\\ /g;  # ties (~) to literal space (\ )
+  }
+
+
+# Because the refer format does not have fields set aside for such things
+# as edition, ISBN, ISSN, look for them in other fields.  Also, some people
+# often put things like pages, techreport, and other information in the
+# wrong field.  Once again, look for them and move them to the correct one.
+
+  #   Look for Thesis or Dissertation in O and move to R
+  if ($entry{O}) {
+    $_ = $entry{O};
+    if ( (!$entry{R}) && ( (/thesis/i) || /dissert/i) ) {
+      $entry{R} = $entry{O};
+      delete $entry{O};
+    }
+  }
+
+  # Look for "Tech* Rep*" in S and move to R
+  if ( ($entry{S} =~ /tech\w*\s+rep\w*/i) && (!$entry{R}) ) {
+    $entry{R} = $entry{S};
+    delete $entry{S};
+  }
+
+  # Look for "* No. *" in V and move to N
+  if (($entry{V} =~ /(\d+)\s+(no\.?|numb?e?r?\.?)\s+(\d+)/i) && (!$entry{N})){
+    $entry{N} = $3;
+    $entry{V} =~ s/(\d+)\s+(no\.?|numb?e?r?\.?)\s+(\d+)/$1/i;
+  }
+
+  # Look for "* Edition" in some fields and move to Ed field
+  foreach $field (O,R,S,V,T,B) {
+    if ($entry{$field} =~ /([\w\d]+)\s+edition/i) {
+      $entry{Ed} = $1;
+      $entry{$field} =~ s/\s*[-,;(]?\s*([\w\d]+)\s+edition\s*[),;]?\s*//i;
+      if ($entry{$field} =~ /^\s*$/) {
+        delete $entry{$field};
+      }
+    }
+  }
+
+  #   Look for ISBN/ISSN # in some fields and move to ISBN/ISSN
+  foreach $field (G,O) {
+    if ($entry{$field} =~ /IS[BS]N/) {
+      $entry{$field} =~ s/\\ /~/g;
+      if ($entry{$field} =~ /ISBN\s*:?\s*(\d\S*)/i) {
+        $entry{ISBN} = $1;
+        $entry{ISBN} =~ s/[;.,]$//g;
+        $entry{ISBN} =~ s/~/-/g;
+        $entry{$field} =~ s/\s*[,;]?\s*ISBN\s*:?\s*(\d\S*)\s*[,;]?//i;
+      }
+      if ($entry{$field} =~ /ISSN\s*:?\s*(\d\S*)/i) {
+        $entry{ISSN} = $1;
+        $entry{ISSN} =~ s/[;.,]$//g;
+        $entry{ISSN} =~ s/~/-/g;
+        $entry{$field} =~ s/\s*[,;]?\s*ISSN\s*:?\s*(\d\S*)\s*[,;]?//i;
+      }
+      $entry{$field} =~ s/(^|[^\\])~/$1\\ /g;
+    }
+  }
+
+  # look for pp or pages in O and move to P
+  if ( (!$entry{P}) && ($entry{O} =~ /[XIVxiv]*\+?(\d+)\s*(pp\.?|pages),?/i) ) {
+    $entry{P} = $1;
+    $entry{O} =~ s/\s*[,;]?\s*[XIVxiv]*\+?(\d+)\s*(pp\.?|pages),?\s*//i;
+  }
+
+  # look for date in B if there is no D field
+  if ( (!$entry{D}) && ($entry{B}) ) {
+    if ($entry{B} =~ /\b(\d\d\d\d)\b/) {
+      $entry{D} = $1;
+    } elsif ($entry{B} =~ /'(\d\d)\b/) {
+      $entry{D} = $1;
+    }
+  }
+
+  # pick out reptype and repnumber
+  undef ($reptype, $repnumber);
+  if ($entry{R}) {
+    ($reptype, $repnumber) = $entry{R} =~ /(.+)\s+(\S+)$/;
+    if ($repnumber !~ /\d/) {
+      $reptype = $entry{R};
+      undef $repnumber;
+    }
+  }
+
+# titles:  cap-protect = 0, leave them alone.
+#          cap-protect = 1, protect multi-cap sequences, and singles. (default)
+#          cap-protect = 2, protect all capitals.
+  if ($entry{T}) {
+    if ($capprotect == 1) {
+      1 while $entry{T} =~ 
+               s/([^{\\\w]|^)([A-Z]+)([^{}\\\w]|$)/$1{$2}$3/g;
+      $entry{T} =~ s/^{([A-Z])}/$1/;
+    } elsif ($capprotect == 2) {
+      $entry{T} =~ s/([A-Z]+)/{$1}/g;
+    }
+  }
+
+  # set date fields
+
+  &parsedate();
+
+  # convert names to BiBTeX format as best we can
+  if ($entry{A}) {
+    $entry{Key_A} = &parsename($entry{A}, A);
+    $entry{A} = $fname;
+    $aeditors = $editors;
+    $acauthor = $corpauthors;
+  }
+  if ($entry{E}) {
+    $entry{Key_E} = &parsename($entry{E}, E);
+    $entry{E} = $fname;
+  } elsif ($aeditors) {
+    $entry{E}     = $entry{A};
+    $entry{Key_E} = $entry{Key_A};
+    delete $entry{Key_A};
+    delete $entry{A};
+  }
+  if ($entry{Q} || $entry{I}) {
+    if ($entry{Q}) {
+      $entry{Q} =~ s/^and //;
+      $entry{Q} =~ s/\s+/ /g;
+      ($entry{Key_Q}) = split(/[\s~]/, $entry{Q});
+    } else {
+      ($entry{Key_I}) = split(/[\s~]/, $entry{I});
+    }
+    if ($acauthor) {
+      ($entry{Key_A}) = split(/[\s~]/, $entry{A});
+      $entry{Key_A} =~ s/^{([^}]*)}?.*$/$1/;
+    }
+  } elsif ($acauthor) {
+    $entry{Q}     = $entry{A};
+    ($entry{Key_Q}) = split(/[\s~]/, $entry{Q});
+    $entry{Key_Q} =~ s/^{([^}]*)}?.*$/$1/;
+    delete $entry{Key_A};
+    delete $entry{A};
+  }
+
+  # set or generate key
+  &genkey();
+
+  # determine the Entry Type
+  # This is where the heuristics come into play.  We need to examine what
+  # fields we were given, and sometimes examine the field contents, to
+  # determine what type of entry this is.
+
+  if ($entry{J} && !$entry{B}) {
+    $type = 'article';
+    $_ = $entry{J};
+    if (/^proc\w*\.\s/i || /proceeding/i || /proc[.]?\s+of\s/i ||
+        /conference/i || /symposium/i || /workshop/i ) {
+      $type = 'inproceedings';
+      $entry{B} = $entry{J};
+      if ($entry{N}) {   # These should be %B Proc, %J Journal, but do anyway.
+        # Hope they did "proceedings of ..., published as ..."
+        if (/^(.*)published\s+(in|as)\s+(.*)$/i) {
+          $entry{B} = $1;
+          $entry{J} = $3;
+          $entry{B} =~ s/,?\s*$//;
+        }
+        $entry{O} .= "Published as $entry{J}";
+        if ($entry{V}) { $entry{O} .= ", volume $entry{V}"; }
+        if ($entry{N}) { $entry{O} .= ", number $entry{N}"; }
+        delete $entry{V};
+        delete $entry{N};
+      }
+      delete $entry{J};
+    }
+  } elsif ($entry{B}) {
+    $type = '';
+    if ($entry{T}) {
+      $type .= 'in';
+    }
+    $_ = $entry{B};
+    if (/^proc\w*\.\s/i || /proceeding/i || /conference/i || /workshop/i) {
+      $type .= 'proceedings';
+    } else {
+      $type .= 'collection';
+    }
+    if ($entry{J}) {
+      $entry{O} .= "Published as $entry{J}";
+      if ($entry{V}) { $entry{O} .= ", volume $entry{V}"; }
+      if ($entry{N}) { $entry{O} .= ", number $entry{N}"; }
+      delete $entry{J};
+      delete $entry{V};
+      delete $entry{N};
+    }
+  } elsif ($entry{R}) {
+    $type = 'techreport';
+    $_ = $reptype;
+    s/^{\\[rbi][mft] //g;       # just in case someone changed the font
+    tr/A-Za-z//cd;              # only A-z are left
+    if (/^phd/i) {
+      $type = 'phdthesis';
+      $reptype = "Ph.{D}. Thesis";
+    }
+    if (/^diploma/i) {
+      $type = 'phdthesis';
+      $reptype = "Diploma Thesis";
+    }
+    if (/^master/i || /^m[as]thes/i) {
+      $type = 'mastersthesis';
+      $reptype = "Master's Thesis";
+    }
+    if (/^phd/i || /^master/i || /^m[as]thes/i || /^diploma/i) {
+      if ($entry{R} =~ /thesis/i) {
+        ($repnumber) = $entry{R} =~ /thesis\W*(.*)$/i;
+      }
+      if ($entry{R} =~ /dissert/i) {
+        $reptype =~ s/Thesis/Dissertation/;
+        ($repnumber) = $entry{R} =~ /dissert\w*\W*(.*)$/i;
+      }
+    }
+    /^draft/i     && ($type = 'unpublished');
+    /^unpublish/i && ($type = 'unpublished');
+
+    if (!$entry{N}) {
+      $entry{N} = $repnumber;
+    }
+    $entry{Type} = $reptype;
+    undef $reptype;
+    undef $repnumber;
+    if ( (!$entry{Q}) && ($entry{I}) ) {
+      $entry{Q} = $entry{I};
+      delete $entry{I};
+    }
+  } elsif ($entry{I}) {
+    $type = 'book';
+  } else {
+    $type = 'misc';
+  }
+
+  # BibTeX has no collection type, sigh.  We change 'collection' to 'book'.
+  if ($type eq 'collection') {
+    $type = 'book';
+  }
+
+  $number{$type}++;
+  
+  # if we have an institution but no author, the Inst. is the author
+  if ( ($entry{Q}) && (!$entry{A}) ) {
+    $entry{A} = "{" . $entry{Q} . "}";
+  }
+
+  # if there is no address, but a "header" field, assume H stands for "held in"
+  if ( ($entry{H}) && (!$entry{C}) ) {
+    $entry{C} = $entry{H};
+    delete $entry{H};
+  }
+  # set institution to be the corporate author unless it's Anonymous
+  if ($entry{Q} !~ /^anon\.?\w*$/i) {
+    $entry{Ins} = $entry{Q};
+  }
+  # if we have a reptype and number, but no "Type" entry, move to other.
+  if ($reptype) {
+    $entry{O} .= $entry{R};
+    delete $entry{R};
+  }
+
+
+  # Change things around for each types
+  $_ = $type;
+
+  /^mastersthesis/ && do { $entry{Sch} = $entry{Ins}; delete $entry{Ins}; };
+  /^phdthesis/     && do { $entry{Sch} = $entry{Ins}; delete $entry{Ins}; };
+  /^unpublished/   && do { $entry{O} .= $entry{Ins}; delete $entry{Ins}; };
+
+  # Syntax checking
+
+  /^article/       && (&syntax(A, T, J, Yr));
+  /^book/          && (&syntax(AE, T, I, Yr));
+  /^incollection/  && (&syntax(A, T, B, I, Yr));
+  /^inproceedings/ && (&syntax(A, T, B, Yr));
+  /^mastersthesis/ && (&syntax(A, T, Sch, Yr));
+  /^phdthesis/     && (&syntax(A, T, Sch, Yr));
+  /^proceedings/   && (&syntax(BT, Yr));
+  /^techreport/    && (&syntax(A, T, Ins, Yr));
+  /^unpublished/   && (&syntax(A, T, O));
+
+  # set up the entry output string
+
+  $ent = '';
+  $ent .= "@$type\{$key,\n";
+
+  if ($entry{Key}) { $ent .= "   key = \{$entry{Key}\},\n"; }
+  if ($entry{A})   { $ent .= "   author = \{$entry{A}\},\n"; }
+  if ($entry{E})   { $ent .= "   editor = \{$entry{E}\},\n"; }
+  if ($entry{T})   { $ent .= "   title = \{$entry{T}\},\n"; }
+  if ($entry{B})   {
+    if ($entry{T}) {
+                     $ent .= "   booktitle = \{$entry{B}\},\n";
+    } else {
+                     $ent .= "   title = \{$entry{B}\},\n";
+    } }
+  if ($entry{Ins}) { $ent .= "   institution = \{$entry{Ins}\},\n"; }
+  if ($entry{Sch}) { $ent .= "   school = \{$entry{Sch}\},\n"; }
+  if ($entry{J})   { $ent .= "   journal = \{$entry{J}\},\n"; }
+  if ($entry{Type}){ $ent .= "   type = \{$entry{Type}\},\n"; }
+  if ($entry{S})   { $ent .= "   series = \{$entry{S}\},\n"; }
+  if ($entry{V})   { $ent .= "   volume = \{$entry{V}\},\n"; }
+  if ($entry{N})   { $ent .= "   number = \{$entry{N}\},\n"; }
+  if ($entry{Ed})  { $ent .= "   edition = \{$entry{Ed}\},\n"; }
+  if ($entry{P})   { $ent .= "   pages = \{$entry{P}\},\n"; }
+  if ($entry{I})   { $ent .= "   publisher = \{$entry{I}\},\n"; }
+  if ($entry{C})   { $ent .= "   address = \{$entry{C}\},\n"; }
+  # since we allow abbrevs for month, don't print {}s
+  if ($entry{Mo})  { $ent .= "   month = $entry{Mo},\n"; }
+  if ($entry{Yr})  { $ent .= "   year = \{$entry{Yr}\},\n"; }
+  if ($entry{'$'}) { $ent .= "   price = \{$entry{'$'}\},\n"; }
+  if ($entry{'*'}) { $ent .= "   copyright = \{$entry{'*'}\},\n"; }
+  if ($entry{K})   { $ent .= "   keywords = \{$entry{K}\},\n"; }
+  if ($entry{M})   { $ent .= "   mrnumber = \{$entry{M}\},\n"; }
+  if ($entry{l})   { $ent .= "   language = \{$entry{l}\},\n"; }
+  if ($entry{U})   { $ent .= "   annote = \{$entry{U}\},\n"; }
+  if ($entry{ISBN}){ $ent .= "   ISBN = \{$entry{ISBN}\},\n"; }
+  if ($entry{ISSN}){ $ent .= "   ISSN = \{$entry{ISSN}\},\n"; }
+  if ($entry{X})   { $ent .= "   abstract = \{$entry{X}\},\n"; }
+  if ($entry{G})   { $ent .= "   note = \{$entry{G}\},\n"; }
+  if ($entry{H})   { $ent .= "   note = \{$entry{H}\},\n"; }
+  if ($entry{O})   { $ent .= "   note = \{$entry{O}\},\n"; }
+  if ($entry{Z})   { $ent .= "   note = \{$entry{Z}\},\n"; }
+  if ($entry{Y})   { if (!$prcontents) { $entry{Y} = "(not listed)"; }
+                     $ent .= "   contents = \{$entry{Y}\},\n"; }
+
+  substr($ent, -2, 1) = '';
+  $ent .= "\}\n\n";
+
+  &printerrors();
+  print $ent;
+}
+
+##########################################
+#
+# date looks like                   month                dec  year           
+# --------------------------------  -------------------  --  ---------------
+# 1984                                                   84  1984           
+# 1974-1975                                              74  1974-1975      
+# August 1984                       aug                  84  1984           
+# May 1984 May 1984                 may                  84  1984           
+# 1976 November                     nov                  76  1976           
+# 1976 November 1976                nov                  76  1976           
+# 21 August 1984                    {21 August}          84  1984           
+# August 18-21, 1984                {August 18-21}       84  1984           
+# 18-21 August 1991                 {18-21 August}       91  1991           
+# July 31-August 4, 1984 1984       {July 31-August 4}   84  1984           
+# July-August 1980                  {July-August}        80  1980           
+# February 1984 (revised May 1991)  feb                  84  1984           
+# Winter 1990                       {Winter}             90  1990           
+# 1988 (in press)                                        88  1988 (in press)
+# to appear                                              ??  to appear
+#
+sub parsedate {
+  local($date) = $entry{D};
+
+# These were done earlier for each field
+#  $date =~ s/^\s+//;
+#  $date =~ s/\s+$//;
+  $date =~ s/(\S+)\s+(\d+)\s+\1\s+\2/$1 $2/;   # handle duplicate dates
+  $date =~ s/^\s*(\d\d\d+)\s+(\S+)/$2 $1/;     # handle 1976 November
+  while ($date =~ /\s*[(]?((\d\d\d\d[-\/])?\d\d\d\d)[).]?\s*(\(.*\))?$/) {
+    $entry{Yr} = $1;
+    $date =~ s/,?\s*[(]?(\d\d\d\d[-\/])?\d\d\d\d[).]?\s*(\(.*\))?$//;
+  }
+#  $entry{YrKey} = $entry{Yr} ? $entry{Yr} : "????";
+  if ($entry{Yr}) {
+    $entry{YrKey} = $entry{Yr};
+  } elsif ($date =~ /(\d\d\d\d)/) {
+    $entry{YrKey} = $1;
+  } else {
+    $entry{YrKey} = "????";
+  }
+  $entry{Decade} = substr($entry{YrKey}, 2, 2);
+  if (length($date) == 0) { return; }
+
+  $_ = $date;
+  if (!/[-\d]/) {
+    /^jan/i && do { $entry{Mo} = "jan"; };
+    /^feb/i && do { $entry{Mo} = "feb"; };
+    /^mar/i && do { $entry{Mo} = "mar"; };
+    /^apr/i && do { $entry{Mo} = "apr"; };
+    /^may/i && do { $entry{Mo} = "may"; };
+    /^jun/i && do { $entry{Mo} = "jun"; };
+    /^jul/i && do { $entry{Mo} = "jul"; };
+    /^aug/i && do { $entry{Mo} = "aug"; };
+    /^sep/i && do { $entry{Mo} = "sep"; };
+    /^oct/i && do { $entry{Mo} = "oct"; };
+    /^nov/i && do { $entry{Mo} = "nov"; };
+    /^dec/i && do { $entry{Mo} = "dec"; };
+  }
+
+  if (!$entry{Mo}) {
+    if (!$entry{Yr}) {
+      $entry{Yr} = $entry{D};
+    }
+    else {
+      $entry{Mo} = '{' . $date . '}';
+    }
+  }
+  $entry{Decade} = substr($entry{YrKey}, 2, 2);
+}
+
+##########################################
+# key is Author's last name followed by last 2 digits of year.
+# in corporate author's case, key is first word and first 2 digits.
+# order is L, A, Q, E, I, "Anonymous"
+# In case of conflict, ascending letters are added to the end
+# Perl knows that "z"+1 == "aa" and "az"+1 == "ba".  Uskomatonta!
+#
+# BiBTeX's cite keys are case-INsensitive.  We want to keep the
+# pretty looking capitalization though, so we modify key and lkey.
+# We now check Label fields for duplicate keys
+sub genkey {
+  local($noadd) = @_;
+  local($name, $lenkey);
+
+  if ($entry{L} && (!$ignorelabel) ) {
+    $key = $entry{L};
+  } else {
+    $name = $entry{Key_A} || $entry{Key_Q} || $entry{Key_E}
+            || $entry{Key_I} || $noadd || "Anonymous";
+
+    $name = sprintf("%.${maxllength}s", $name);
+    $key = $name . $entry{Decade};
+  }
+
+  $key =~ s/,//g;
+  $lenkey = length($key);
+  $lkey = $key;
+  $lkey =~ tr/A-Z/a-z/;         # citekeys are case-insensitive
+
+  if ($allkeys{$lkey}) {
+    $key .= 'a';
+    $lkey = $key;
+    $lkey =~ tr/A-Z/a-z/;
+    while ($allkeys{$lkey}) {
+      substr($key,$lenkey)++;   # increment all chars past Decade
+      $lkey = $key;
+      $lkey =~ tr/A-Z/a-z/;
+    }
+  }
+
+  if ($noadd) {
+    return($key);
+  }
+
+  $allkeys{$lkey} = $key;
+  if ($name eq "Anonymous") {
+    $entry{Key} = $key;
+  }
+}
+
+
+##########################################
+# parsename parses names into BiBTeX format
+#
+# This uses heuristics to parse a name into First, von, Last, and Jr
+# parts.  It handles multiple names (John doe, jane doe) on a line.
+# It does not handle names in "last, first" format.
+# it returns a key (last name of author or editor, first name of corp).
+# It sets $fname to the full bibtex name.
+# It sets $editors, $authors, or $corpauthors if it thinks the name is one.
+#
+sub parsename {
+  local($allnames, $ntype) = @_;
+  local($firstn, $vonn, $lastn, $jrn);
+  local(@names, $keyn, $oname, $nname, $rest);
+ 
+  undef $fname;
+  $editors = $authors = $corpauthors = 0;
+
+  # handle unpaddable spaces (\ ) in names as if they were ties (\0)
+  $allnames =~ s/\\ /~/g;     # the ties (~) get converted back later.
+  $allnames =~ s/\s+/ /g;
+  $allnames =~ s/^and //;
+  $allnames =~ s/^and$//;
+
+  if ( ($allnames !~ /\s/) && ($allnames !~ /anonymous/i) ){
+    $corpauthors = 1;
+  }
+  @names = split(/ and /, $allnames);
+  if (!$nameconv) {
+    $fname = $allnames;
+    $_ = shift @names;
+    # if we're leaving names alone, they're probably already in "Last, First"
+    # format, so use the first part of the name as the key.
+    ($name) = /^\s*(\S*)/;
+    #  ($name) = /(\S*)\s*$/;
+    $name =~ tr/A-Za-z0-9\/\-//cd;
+    return $name;
+  }
+  while (@names) {
+    $oname = $name = shift @names;
+    $firstn = $vonn = $lastn = '';
+
+    if ( $revauthor && ($ntype eq A) && ($name =~ /,/) ) {
+      $jrn = "";
+      if ($name =~ s/[,\s]+([sj]r\.?|I+)\s*$//i) {
+        $jrn = ", " . $1;
+      }
+      $name =~ s/^(.*)\s*,\s*(.*)/$2 $1$jrn/g;
+    }
+    $jrn = "";
+
+    $name =~ s/[\s~]+([sj]r\.?|\(?edi?t?o?r?s?\.?\)?|I+)(,|$)/, $1/i;
+    $name =~ s/,,/,/g;
+    ($nname, $jrn) = split(/,[^~]/, $name, 2);
+#    print "name: $name  -> $nname : $jrn\n";
+    $nname =~ s/\s+$//;
+    $jrn =~ s/^[\s~]+//;
+    $jrn =~ s/,$//;
+    if ($jrn =~ /\s/) {
+      ($jrn, $rest) = $jrn =~ /([sj]r\.?|\(?edi?t?o?r?s?\.?\)?|I+)?,?\s*(.*)$/i;
+      unshift(@names, $rest);
+    }
+    $jrn =~ s/([^\\])~/$1 /g;
+    ($firstn) = $nname =~ /^((\S* )*)/;
+    $nname = substr($nname, length($firstn));
+    $lastn = $nname;
+    $lastn =~ s/([^\\])~/$1 /g;
+    $firstn =~ s/([^\\])~/$1 /g;
+    while ($firstn =~ / ([a-z]+ )$/) {
+      $rest = $1;
+      $vonn = $rest . $vonn;
+      $firstn = substr($firstn, 0, length($firstn) - length($rest));
+    }
+    while ($lastn =~ /^([a-z]+ )/) {
+      $rest = $1;
+      $vonn .= $rest;
+      $lastn = substr($lastn, length($rest));
+    }
+ 
+    if ($jrn) {
+      if ($jrn =~ /^(et\.?\s*al\.?)|(others)$/i) {
+        undef $jrn;
+        unshift(@names, "others");
+      }
+      if ($jrn =~ /^[(]?edi?t?o?r?s?[\.]?[)]?$/i) {
+        undef $jrn;
+        $editors = 1;
+      }
+      if ($jrn =~ /^inc[\.]?$/i) {
+        $lastn .= ", " . $jrn;
+        undef $jrn;
+        $corpauthors = 1;
+      }
+    }
+    if ($lastn =~ /^(et\s*al)|(others)$/i) {
+      $lastn = "others";
+    }
+    if ($lastn =~ /\s/) {
+      $lastn = "{" . $lastn . "}";
+    }
+ 
+    if (!$keyn) {
+      if ($corpauthors) {
+        ($keyn) = $lastn =~ /^(\S+)/;
+      } else {
+        ($keyn) = $lastn;       # =~ /(\S+)$/;  # if you want last of Last
+      }
+      $keyn =~ tr/A-Za-z0-9\/\-//cd;
+    }
+
+    if ($jrn) {
+      $fname .= " and " . $vonn . $lastn . ", " . $jrn . ", " . $firstn;
+    } else {
+      $fname .= " and " . $firstn . $vonn . $lastn;
+    }
+  }
+  $fname =~ s/^ and\s+//;
+  $fname =~ s/\s+$//;
+  $fname =~ s/\s+/ /g;
+  if ($ntype eq A) {
+    if ($corpauthors) {
+      &anerror("Corporate Author (%Q) in %A.");
+    } elsif ($editors) {
+      &anerror("Editors (%E) in %A.");
+    }
+  } elsif ($ntype eq Q) {
+    if ($editors) {
+      &anerror("Editors (%E) in %Q.");
+    }
+  } elsif ($ntype eq E) {
+    if ($corpauthors && (!$entry{A})) {
+      &anerror("Corporate Author (%Q) in %E.");
+    }
+  }
+
+  return $keyn;
+}
+
+
+
+##########################################
+# syntax does syntax checking
+#
+sub syntax {
+  foreach $field (@_) {
+    if ($field eq AE) {
+      if ( (!$entry{A}) && (!$entry{E}) ) {
+        &anerror("Missing A and E (Author and Editor) fields.");
+      }
+    } elsif ($field eq BT) {
+      if ( (!$entry{B}) && (!$entry{T}) ) {
+        &anerror("Missing T (Title) field.");
+      }
+    } else {
+      if (!$entry{$field}) {
+        &anerror("Missing $field field.");
+      }
+    }
+  }
+}
+
+
+
+##########################################
+# stores error information until it gets printed
+#
+# This allows us to fully process the entry so we can print out
+# valid key information without having to go through ugly gyrations.
+#
+sub anerror {
+  local($err) = @_;
+
+  push(@errorstring, $err);
+  $errors++;
+}
+
+
+
+##########################################
+# prints out stored error information
+#
+sub printerrors {
+  local($klen, $errst);
+
+  if (@errorstring && (!$nowarnings)) {
+    $klen = $maxllength;  # a little short, but most labels aren't this long
+    foreach $_ (@errorstring) {
+      $errst .= sprintf("%-${klen}s (%5d): %s\n", $key, $errline, $_);
+    }
+    print STDERR $errst;
+  }
+  undef @errorstring;
+  $errline = $linenum+1;
+}
+
+
+
+##########################################
+# converts *roff characters to TeX characters
+#
+# If anyone has any corrections or additions, I'd be happy to see them.
+#
+# Is there a better way to do this?  (i.e. eval)
+#
+sub dorofftotex {
+  local($_) = @_;
+  local($fbraces, $nchanges);
+
+  study;                        # presumably this will help us.
+
+  # tib: refer format, TeX formatting.
+  #      This should probably be set up to read a configuration file into
+  #      a variable then use eval.  If there is such a beast as a "detibify"
+  #      program, then this won't be necessary.
+  if ($tibfmt) {
+    1 while s#\\egroup(.*)\\bgroup#{\\Reffont $1}#g;
+    s/\\Citefont//g;
+    s/\\ACitefont//g;
+    s/\\Authfont//g;
+    s/\\Titlefont//g;
+    s/\\Tomefont/\\sl/g;
+    s/\\Volfont//g;
+    s/\\Flagfont//g;
+    s/\\Reffont/\\rm/g;
+    s/\\Smallcapsfont/\\sevenrm/g;
+    s/\\Flagstyle//g;            # This should be smarter
+
+    if (/\|/) {
+      s/\|JAN\|/January/g;       # yes, the parsedate routine can handle
+      s/\|FEB\|/February/g;      # these most of the time, but sometimes
+      s/\|MAR\|/March/g;         # they're put in the middle of non-date
+      s/\|APR\|/April/g;         # strings, so we'd better convert them.
+      s/\|MAY\|/May/g;
+      s/\|JUN\|/June/g;
+      s/\|JUL\|/July/g;
+      s/\|AUG\|/August/g;
+      s/\|SEP\|/September/g;
+      s/\|OCT\|/October/g;
+      s/\|NOV\|/November/g;
+      s/\|DEC\|/December/g;
+
+      # My example of tib format is AGbib from INRIA, so this is set up to
+      # handle the common cases for that bibliography.
+
+      s/\|UNIV\|/University/g;
+      s/\|DEPT\|/Department/g;
+      s/\|DCS\|/Department of Computer Science/g;
+      s/\|PCS\|/Progr. and Computer Science/g;
+      s/\|CSD\|/Computer Science Department/g;
+      s/\|TR\|/Technical Report/g;
+
+      s/\|COMPJ\|/The Computer Journal/g;
+      s/\|JACM\|/Journal of the ACM/g;
+      s/\|CACM\|/Communications of the ACM/g;
+      s/\|SGPLN\|/Sigplan Notices/g;
+      s/\|SIAJC1\|/SIAM Journal on Computing/g;
+      s/\|ACTAI2\|/Acta Informatica/g;
+      s/\|IEETS1\|/IEEE Transactions on Software Engineering/g;
+      s/\|INFPL2\|/Information Processing Letters/g;
+      if (s/\|LNCS\|/Lecture Notes in Computer Science/g) {
+        $entry{I} .= " " . "Springer-Verlag";
+        $entry{C} .= " " . "New York--Heidelberg--Berlin"; }
+      if (s/\|IFBSV\|/Inf. Fachb./g) {
+        $entry{I} .= " " . "Springer-Verlag";
+        $entry{C} .= " " . "New York--Heidelberg--Berlin"; }
+      s/\|SCICP\|/Science of Computer Programming/g;
+      s/\|SP&E\|/Software---Practice and Experience/g;
+      s/\|POPL\|/ACM Symp. on Principles of Progr. Languages/g;
+      s/\|TOPLAS\|/ACM Trans. Progr. Languages and Systems/g;
+
+      if (s/\|Addison\|/Addison Wesley/g) {
+        $entry{C} .= " " . "Reading, MA"; }
+      if (s/\|PrHall\|/Prentice Hall/g) {
+        $entry{C} .= " " . "Englewood Cliffs, NJ"; }
+      if (s/\|NHoll\|/North-Holland/g) {
+        $entry{C} .= " " . "Amsterdam"; }
+      if (s/\|Cambridge\|/Cambridge University Press/g) {
+        $entry{C} .= " " . "New York"; }
+      if (s/\|Springer\|/Springer-Verlag/g) {
+        $entry{C} .= " " . "New York--Heidelberg--Berlin"; }
+
+      s/\|TWEINF\|/Onderafdeling der Informatica, Tech. Hogeschool Twente/g;
+      s/\|TUMINF\|/Institut f{\"u}r Informatik, Tech. University M{\"u}nchen/g;
+      s/\|HELDCS\|/Department of Computer Science, University of Helsinki/g;
+      if (s/\|IBMTJW\|/IBM T.J. Watson Research Center/g) {
+        $entry{C} .= " " . "Yorktown Heights, NY"; }
+      if (s/\|INRIA\|/INRIA/g) {
+        $entry{C} .= " " . "Rocquencourt"; }
+      if (s/\|IRIAL\|/IRIA-Laboria/g) {
+        $entry{C} .= " " . "Rocquencourt"; }
+      $entry{C} =~ s/^\s+//;
+      $entry{I} =~ s/^\s+//;
+    }
+    return $_;
+  }
+
+  s#_#_U#g;   # _ will be the escape character
+
+  # don't do troff character conversion if there aren't any backslashes
+  # in the string.  Hopefully this will save a little work.
+  if (/\\/) {
+
+    # to make commands, we need command characters, but we don't want
+    # any of the command characters that they use to be passed through
+    # or we'll end up with invalid input.  So, _ is the escape character.
+
+    # _U is _
+    # _B is a backslash
+    # _I is a literal backslash
+    # _S is a space
+    # _C is {\
+    # _L is {
+    # _R is }
+    # _l is <
+    # _g is >
+    # _T is ~
+    # _A is ^
+    # _D is $
+    # _M is $\
+    # _V is |
+    # _E is ${}^
+    # _H is \hbox{
+    # _h is \leavevmode
+    # _c is a special continuation character for long lines
+
+    # I'm not sure I quite get this -- refer strips off one \ for most
+    # characters it seems.  But other times it doesn't.  Argh!  I'll
+    # go ahead and replace \\ with \ to handle this.  It shouldn't ever
+    # come up that this is bad since \e and \(rs are a real backslashes.
+
+    s#\\\\#\\#g;                             #  \\    -> \
+
+    # font changes
+    # if one uses \fP, everything is fine -- otherwise we need to get complex
+    $fbraces = 0;
+    $fbraces += s#\\f[1R]#_Crm_S#g;          #  \f1   -> {\rm 
+    $fbraces += s#\\f[2I]#_Cit_S#g;          #  \f2   -> {\it 
+    $fbraces += s#\\f[3B]#_Cbf_S#g;          #  \f3   -> {\bf 
+    $fbraces -= s#\\fP#_R#g;                 #  \fP   -> }
+    while ($fbraces) {                       # too many {'s
+      if ($fbraces < 0) {
+        $nchanges = s#_R##;
+        &anerror("Used \\fP with no previous font.");
+        $fbraces += $nchanges;
+      } else {    # Changed newline matching because 4.019 had problems
+#        $nchanges = s#(_Cit_S)([\s\S]*)_Crm_S#$1$2_R#;
+        $nchanges = s#(_Cit_S)((.|\n)*)_Crm_S#$1$2_R#;
+        if (!$nchanges)
+          { $nchanges = s#(_Cbf_S)([\s\S]*)_Crm_S#$1$2_R#; }
+        if (!$nchanges)
+          { $nchanges = s#(_C\w\w_S)([\s\S]*)_C\w\w_S#$1$2_R#; }
+        if (!$nchanges) {
+          $_ .= "_R";                        # couldn't get it, so stick a } on
+          $fbraces--;
+          &anerror("Problems with font changing.  Suggest using \\fP.");
+        }
+        $fbraces -= ($nchanges * 2);
+      }
+    }
+
+    # point size changes
+    # first,  U\s-2NIX\s0   ->   {\sc Unix}
+    s/\b([A-Z])\\s-[12]([A-Z]+)\\s0/_Csc_S$1\L$2\E_R/g;
+    # very similar to font changes.  If \s0 is used, everything is fine.
+    $fbraces = 0;
+    $fbraces += s#\\s-1#_Csmall_S#g;          #  \s-1   -> {\small 
+    $fbraces += s#\\s-2#_Cfootnotesize_S#g;   #  \s-2   -> {\footnotesize
+    $fbraces += s#\\s-3#_Cscriptsize_S#g;     #  \s-3   -> {\scriptsize
+    $fbraces += s#\\s-4#_Ctiny_S#g;           #  \s-4   -> {\tiny
+    $fbraces += s#\\s+1#_Clarge_S#g;          #  \s+1   -> {\large 
+    $fbraces += s#\\s+2#_CLarge_S#g;          #  \s+2   -> {\Large
+    $fbraces += s#\\s+3#_CLARGE_S#g;          #  \s+3   -> {\LARGE
+    $fbraces += s#\\s+4#_Chuge_S#g;           #  \s+4   -> {\huge
+    $fbraces -= s#\\s0#_R#g;                  #  \s0    -> }
+    while ($fbraces) {                        # too many {'s
+      if ($fbraces < 0) {
+        $nchanges = s#_R##;
+        &anerror("Used \\s0 with no previous point size change.");
+        $fbraces += $nchanges;
+      } else {
+        $nchanges = s#(_Csmall_S)(.*)_Clarge_S#$1$2_R#;
+        if (!$nchanges)
+          { $nchanges = s#(_Cfootnotesize_S)(.*)_CLarge_S#$1$2_R#; }
+        if (!$nchanges)
+          { $nchanges = s#(_Cscriptsize_S)(.*)_CLARGE_S#$1$2_R#; }
+        if (!$nchanges)
+          { $nchanges = s#(_Clarge_S)(.*)_Csmall_S#$1$2_R#; }
+        if (!$nchanges)
+          { $nchanges = s#(_CLarge_S)(.*)_Cfootnotesize_S#$1$2_R#; }
+        if (!$nchanges)
+          { $nchanges = s#(_CLARGE_S)(.*)_Cscriptsize_S#$1$2_R#; }
+        if (!$nchanges) {
+          $_ .= "_R";                         # last resort.  Add an }.
+          $fbraces--;
+          &anerror("Problems with point size changing.  Suggest using \\s0.");
+        }
+        $fbraces -= ($nchanges * 2);
+      }
+    }
+
+
+    # other troff special characters
+    # some of these aren't available as standard TeX, so I made up replacements.
+    # Perhaps they should be def'ed in a preamble and used that way, but I
+    # doubt most files use \(rg, \(ct, and such, so why waste resources.
+    # If you're really concerned about eth, thorn, yogh, or ogonek, go get
+    # the cmoer fonts -- they do the characters right.
+
+    # grab some common overstrikes made by people who don't have a real
+    # troff manual or implementation.
+
+    s#\\o'(\w)\\\(aa'#_C'$1_R#g;             # \o'e\(aa'  -> {\'e}
+    s#\\o'(\w)\\\(ga'#_C`$1_R#g;             # \o'e\(ga'  -> {\`e}
+
+    # Lots of bibliographies from Europe use \:o to mean \(o:, etc.  Both
+    # Elan troff and groff don't know what this means, so I don't do the
+    # conversion by default.  Use '-overstrike' to get this behaviour.
+
+    if ($overstrike) {
+      s#\\([:`'^~,v/o])([AEIOUYaeiouyNnCcSs])#\\\($2$1#g;
+    }
+
+    s#\\\(bu#_Mbullet_D#g;                   # \(bu  -> $\bullet$
+    s#\\\(ci#_Mbigcirc_D#g;                  # \(ci  -> $\bigcirc$
+    s#\\\(sq#_MBox_D#g;                      # \(sq  -> $\Box$
+    s#\\\(ct#_h_Brm_Brlap/c_R#g;             # \(ct  -> \hbox{\rm\rlap/c}
+    s#\\\(rg#_h_Braise.6em_H_Booalign_L_L_Bmathhexbox20D_R_Bcrcr\n_Bhfil_Braise.07ex_Hr_R_Bhfil_R_R_R#g;
+    s#\\\(co#_h_Braise.6em_H_Bcopyright_R_R#g;
+    s#\\\(lh#_MLongleftarrow_D#g;            # \(lh  -> $\Longleftarrow$ #wrong!
+    s#\\\(rh#_MLongrightarrow_D#g;           # \(rh  -> $\Longrightarrow$
+    s#\\\(dg#_Bdag #g;                       # \(dg  -> \dag
+    s#\\\(dd#_Bddag #g;                      # \(dd  -> \ddag
+    s#\\\(sc#_BS #g;                         # \(sc  -> \S
+    s#\\\(br#_D_V_D#g;                       # \(br  -> $|$
+    s#\\\(fm#_E_Bprime_D#g;                  # \(fm  -> ${}^\prime$
+    s#\\\(de#_E_Bcirc_D#g;                   # \(de  -> ${}^\circ$
+    s#\\\(em#--#g;                           # \(em  -> --
+    s#\\\(hy#-#g;                            # \(hy  -> -
+    s#\\\(ru#_Cvrule width1.2ex height0.1ex depth0ex_R#g;
+    s#\\\(ul#_Cvrule width1.2ex height-.3ex depth.4ex_R#g;
+    s#\\\-#---#g;                            # \-    -> --
+    s#\\\(aa#_C'_L _R_R#g;                   # \(aa  -> {\'{ }}
+    s#\\'#_C'_L _R_R#g;                      # \'    -> {\'{ }}
+    s#\\\(ga#_C`_L _R_R#g;                   # \(ga  -> {\`{ }}
+    s#\\`#_C`_L _R_R#g;                      # \`    -> {\`{ }}
+    s#\\\(sl#/#g;                            # \(sl  -> /
+    s#\\e#_I#g;                              # \e    -> $\backslash$
+    s#\\0#_T#g;                              # \0    -> ~
+    s#\\ #_B #g;                             # '\ '  -> '\ '
+    s#\\\^#_D_B,_D#g;                        # \^    -> $\,$
+    s#\\\|#_D_B:_D#g;                        # \|    -> $\:$
+    s#\\\(fi#fi#g;                           # \(fi  -> fi
+    s#\\\(fl#fl#g;                           # \(fl  -> fl
+    s#\\\(ff#ff#g;                           # \(ff  -> ff
+    s#\\\(Fi#ffi#g;                          # \(Fi  -> ffi
+    s#\\\(Fl#ffl#g;                          # \(Fl  -> ffl
+
+    s#\\\(pl#_D+_D#g;                        # \(pl  -> $+$
+    s#\\\(mi#_D-_D#g;                        # \(mi  -> $-$
+    s#\\\(mu#_Mtimes_D#g;                    # \(mu  -> $\times$
+    s#\\\(di#_Mdiv_D#g;                      # \(di  -> $\div$
+    s#\\\(\+\-#_Mpm_D#g;                     # \(+-  -> $\pm$
+    s#\\\(no#_Mneg_D#g;                      # \(no  -> $\neg$
+    s#\\\(\*\*#_Mast_D#g;                    # \(**  -> $\ast$
+    s#\\\(eq#_D=_D#g;                        # \(eq  -> $=$
+    s#\\\(>=#_Mgeq_D#g;                      # \(>=  -> $\geq$
+    s#\\\(<=#_Mleq_D#g;                      # \(<=  -> $\leq$
+    s#\\\(==#_Mequiv_D#g;                    # \(==  -> $\equiv$
+    s#\\\(~=#_Msimeq_D#g;                    # \(~=  -> $\simeq$
+    s#\\\(ap#_Msim_D#g;                      # \(ap  -> $\sim$
+    s#\\\(!e#_Mneq_D#g;                      # \(!e  -> $\neq$
+    s#\\\(\->#_Mrightarrow_D#g;              # \(->  -> $\rightarrow$
+    s#\\\(<\-#_Mleftarrow_D#g;               # \(<-  -> $\leftarrow$
+    s#\\\(ua#_Muparrow_D#g;                  # \(ua  -> $\uparrow$
+    s#\\\(da#_Mdownarrow_D#g;                # \(da  -> $\downarrow$
+    s#\\\(cu#_Mcup_D#g;                      # \(cu  -> $\cup$
+    s#\\\(ca#_Mcap_D#g;                      # \(ca  -> $\cap$
+    s#\\\(sb#_Msubset_D#g;                   # \(sb  -> $\subset$
+    s#\\\(sp#_Msupset_D#g;                   # \(sp  -> $\supset$
+    s#\\\(ib#_Msubseteq_D#g;                 # \(ib  -> $\subseteq$
+    s#\\\(ip#_Msupseteq_D#g;                 # \(ip  -> $\supseteq$
+    s#\\\(if#_Minfty_D#g;                    # \(if  -> $\infty$
+    s#\\\(es#_Memptyset_D#g;                 # \(es  -> $\emptyset$
+    s#\\\(is#_Mint_D#g;                      # \(is  -> $\int$
+    s#\\\(pd#_Mpartial_D#g;                  # \(pd  -> $\partial$
+    s#\\\(sr#_Msurd_D#g;                     # \(sr  -> $\surd$
+    s#\\\(gr#_Mnabla_D#g;                    # \(gr  -> $\nabla$
+    s#\\\(pt#_Mpropto_D#g;                   # \(pt  -> $\propto$
+    s#\\\(mo#_Min_D#g;                       # \(mo  -> $\in$
+    s#\\\(or#_Mmid_D#g;                      # \(or  -> $\mid$
+    s#\\\((\d)(\d)#_D$1_Bover$2_D#g;         # \(14  -> $1\over4$
+
+    s#\\\(m\.#_Mcdot_D#g;                    # \(m.  -> $\cdot$
+    s#\\\(!s#_Mnot_Bsubset_D#g;              # \(!s  -> $\not\subset$
+    s#\\\(an#_Mwedge_D#g;                    # \(an  -> $\wedge$
+    s#\\\(lo#_Mvee_D#g;                      # \(lo  -> $\vee$
+    s#\\\(tf#_D_H._R_Braise.9ex_H._R_H._R_D#g;# \(tf -> .:.
+    s#\\\(cm#_Mni_D#g;                       # \(cm  -> $\ni$
+    s#\\\(fa#_Mforall_D#g;                   # \(fa  -> $\forall$
+    s#\\\(te#_Mexists_D#g;                   # \(te  -> $\exists$
+    s#\\\(!m#_Mnotin_D#g;                    # \(!m  -> $\notin$
+    s#\\\(a\+#_Moplus_D#g;                   # \(a+  -> $\oplus$
+    s#\\\(ax#_Motimes_D#g;                   # \(ax  -> $\otimes$
+    s#\\\(ag#_Mangle_D#g;                    # \(ag  -> $\angle$
+    s#\\\(rn#_Moverline_L _R_D#g;            # \(rn  -> $\overline{ }$
+    s#\\\(<<#_Mll_D#g;                       # \(<<  -> $\ll$
+    s#\\\(>>#_Mgg_D#g;                       # \(>>  -> $\gg$
+    s#\\\(<>#_Mleftrightarrow_D#g;           # \(<>  -> $\leftrightarrow$
+    s#\\\(//#_D/_D#g;                        # \(//  -> $/$
+    s#\\\(L<#_Mlangle_D#g;                   # \(L<  -> $\langle$
+    s#\\\(R>#_Mrangle_D#g;                   # \(R>  -> $\rangle$
+    s#\\\(dm#_Mdiamond_D#g;                  # \(dm  -> $\diamond$
+    s#\\\(lt#_Mlbrace_D#g;                   # \(lt  -> $\lbrace$
+    s#\\\(rt#_Mrbrace_D#g;                   # \(rt  -> $\rbrace$
+    s#\\\(lb#_Mlfloor_D#g;                   # \(lb  -> $\lfloor$
+    s#\\\(rt#_Mrfloor_D#g;                   # \(rt  -> $\rfloor$
+    s#\\\(lk#_Mlbrace_D#g;                   # \(lk  -> $\lbrace$
+    s#\\\(rk#_Mrbrace_D#g;                   # \(rk  -> $\rbrace$
+    s#\\\(lf#_Mlfloor_D#g;                   # \(lf  -> $\lfloor$
+    s#\\\(rf#_Mrfloor_D#g;                   # \(rf  -> $\rfloor$
+    s#\\\(lc#_Mlceil_D#g;                    # \(lc  -> $\lceil$
+    s#\\\(rc#_Mrceil_D#g;                    # \(rc  -> $\rceil$
+
+    s#\\\(bv#_Cmbox_Cboldmath_Mmid_D_R_R#g;  # \(bv  -> {\mbox{\boldmath$\mid$}}
+    s#\\\(bx#_Cvrule width.5em height.6em depth-.1em_R#g;
+    s#\\\(cf#^#g;                            # \(cf  -> ^
+    s#\\\(al#_Maleph_D#g;                    # \(al  -> $\aleph$
+    s#\\\(If#_MIm_D#g;                       # \(If  -> $\Im$
+    s#\\\(Rf#_MRe_D#g;                       # \(Rf  -> $\Re$
+    s#\\\(ws#_Mwp_D#g;                       # \(ws  -> $\wp$
+    s#\\\(mt#_E_Bprime_D#g;                  # \(mt  -> ${}^\prime$
+    s#\\\(sd#_E_L_Bprime_B!_Bprime_R_D#g;    # \(sd  -> ${}^{\prime\!\prime}$
+    s#\\\(pa#_BP#g;                          # \(pa  -> \P
+    s#\\\(Cc#_Mclubsuit_D#g;                 # \(Cc  -> $\clubsuit$
+    s#\\\(Cd#_Mdiamondsuit_D#g;              # \(Cd  -> $\diamondsuit$
+    s#\\\(Ch#_Mheartsuit_D#g;                # \(Ch  -> $\heartsuit$
+    s#\\\(Cs#_Mspadesuit_D#g;                # \(Cs  -> $\spadesuit$
+    s#\\\(bt#_Mperp_D#g;                     # \(bt  -> $\perp$
+    s#\\\(<:#_MLeftarrow_D#g;                # \(<:  -> $\Leftarrow$
+    s#\\\(:>#_MRightarrow_D#g;               # \(:>  -> $\Rightarrow$
+    s#\\\(io#_MLeftrightarrow_D#g;           # \(io  -> $\Leftrightarrow$
+    s#\\\(u=#_MUparrow_D#g;                  # \(u=  -> $\Uparrow$
+    s#\\\(d=#_MDownarrow_D#g;                # \(d=  -> $\Downarrow$
+    s#\\\(r1#_Mrightleftharpoons_D#g;        # \(r1  -> $\rightleftharpoons$
+    s#\\\(r2#_Mleftharpoondown_D#g;          # \(r2  -> $\leftharpoondown$
+    s#\\\(cr#_Mhookleftarrow_D#g;            # \(cr  -> $\hookleftarrow$
+    s#\\\(AL#_M_D#g;                # \(AL  ->
+    s#\\\(DL#_M_D#g;                # \(DL  ->
+
+    s#\\\(\*a#_Malpha_D#g;                   # \(*a  -> $\alpha$
+    s#\\\(\*b#_Mbeta_D#g;                    # \(*b  -> $\beta$
+    s#\\\(\*c#_Mxi_D#g;                      # \(*c  -> $\xi$
+    s#\\\(\*d#_Mdelta_D#g;                   # \(*d  -> $\delta$
+    s#\\\(\*e#_Mvarepsilon_D#g;              # \(*e  -> $\varepsilon$
+    s#\\\(\*f#_Mphi_D#g;                     # \(*f  -> $\phi$
+    s#\\\(\*g#_Mgamma_D#g;                   # \(*g  -> $\gamma$
+    s#\\\(\*h#_Mtheta_D#g;                   # \(*h  -> $\theta$
+    s#\\\(\*i#_Miota_D#g;                    # \(*i  -> $\iota$
+    s#\\\(\*k#_Mkappa_D#g;                   # \(*k  -> $\kappa$
+    s#\\\(\*l#_Mlambda_D#g;                  # \(*l  -> $\lambda$
+    s#\\\(\*m#_Mmu_D#g;                      # \(*m  -> $\mu$
+    s#\\\(\*n#_Mnu_D#g;                      # \(*n  -> $\nu$
+    s#\\\(\*o#_Do_D#g;                       # \(*o  -> $o$
+    s#\\\(\*p#_Mpi_D#g;                      # \(*p  -> $\pi$
+    s#\\\(\*q#_Mpsi_D#g;                     # \(*q  -> $\psi$
+    s#\\\(\*r#_Mrho_D#g;                     # \(*r  -> $\rho$
+    s#\\\(\*s#_Msigma_D#g;                   # \(*s  -> $\sigma$
+    s#\\\(\*t#_Mtau_D#g;                     # \(*t  -> $\tau$
+    s#\\\(\*u#_Mupsilon_D#g;                 # \(*u  -> $\upsilon$
+    s#\\\(\*w#_Momega_D#g;                   # \(*w  -> $\omega$
+    s#\\\(\*x#_Mchi_D#g;                     # \(*x  -> $\chi$
+    s#\\\(\*y#_Meta_D#g;                     # \(*y  -> $\eta$
+    s#\\\(\*z#_Mzeta_D#g;                    # \(*z  -> $\zeta$
+    s#\\\(ts#_Mvarsigma_D#g;                 # \(ts  -> $\varsigma$
+    s#\\\(\*C#_MXi_D#g;                      # \(*C  -> $\Xi$
+    s#\\\(\*D#_MDelta_D#g;                   # \(*D  -> $\Delta$
+    s#\\\(\*F#_MPhi_D#g;                     # \(*F  -> $\Phi$
+    s#\\\(\*G#_MGamma_D#g;                   # \(*G  -> $\Gamma$
+    s#\\\(\*H#_MTheta_D#g;                   # \(*H  -> $\Theta$
+    s#\\\(\*L#_MLambda_D#g;                  # \(*L  -> $\Lambda$
+    s#\\\(\*P#_MPi_D#g;                      # \(*P  -> $\Pi$
+    s#\\\(\*Q#_MPsi_D#g;                     # \(*Q  -> $\Psi$
+    s#\\\(\*R#_Crm_SP_R#g;                   # \(*R  -> {\rm P}
+    s#\\\(\*S#_MSigma_D#g;                   # \(*S  -> $\Sigma$
+    s#\\\(\*U#_Crm_SY_R#g;                   # \(*U  -> {\rm Y}
+    s#\\\(\*W#_MOmega_D#g;                   # \(*W  -> $\Omega$
+    s#\\\(\*Y#_Crm_SH_R#g;                   # \(*Y  -> {\rm H}
+    s#\\\(\*(\w)#_Crm_S$1_R#g;               # \(*_  -> {\rm _}
+
+    # from the -mm macros
+
+    s#\\\*\(Tm#_E_Crm_Buppercase_LTM_R_R_D#g;# \*(Tm -> ${}^{\rm\uppercase{TM}}$
+
+    # I am SO disgusted with troff.  It seems that unless the -ms option is
+    # given, all accents are done in the -mm way e\*'.  In fact, when the
+    # -ms option is given, only the original 7 accents are done postfix.
+
+    s#(ij)\\\*(['`])#_C$1_B$2_R#g;           # i\*'  -> {\'\i}
+    s#(ij)\\\*:#_C"_B$1_R#g;                 # i\*:  -> {\"\i}
+    s#(ij)\\\*\^#_C_A_B$1_R#g;               # i\*^  -> {\^\i}
+    s#(\w)\\\*(['`])#_C$2$1_R#g;             # e\*'  -> {\'e}
+    s#(\w)\\\*\^#_C_A$1_R#g;                 # e\*^  -> {\^e}
+    s#(\w)\\\*~#_C_T$1_R#g;                  # e\*~  -> {\~e}
+    s#(\w)\\\*:#_C"$1_R#g;                   # e\*:  -> {\"e}
+    s#(\w)\\\*;#_C"$1_R#g;                   # U\*;  -> {\"U}
+    s#(\w)\\\*,#_Cc_L$1_R_R#g;               # e\*,  -> {\c{e}}
+
+    # from the Berkeley -ms macros
+
+    s#\\\*\-#--#g;                           # \*-   -> --
+    s#\\\*Q#``#g;                            # \*Q   -> ``
+    s#\\\*U#''#g;                            # \*U   -> ''
+    s#\\\*\(BU#_Mbullet_D#g;                 # \*(BU -> $\bullet$
+    s#\\\*\(EM#--#g;                         # \*(EM -> --
+
+    # changed in 0.8.1, from e\*' to \*'e.
+    # These only get used if the above fail (which they don't).
+    #  An '-ms' option?  What a hack..
+
+    s#\\\*(['`])(ij)#_C$2_B$1_R#g;           # \*'i  -> {\'\i}
+    s#\\\*:(ij)#_C"_B$1_R#g;                 # \*:i  -> {\"\i}
+    s#\\\*\^(ij)#_C_A_B$1_R#g;               # \*^i  -> {\^\i}
+    s#\\\*(['`])(\w)#_C$1$2_R#g;             # \*'e  -> {\'e}
+    s#\\\*\^(\w)#_C_A$1_R#g;                 # \*^e  -> {\^e}
+    s#\\\*~(\w)#_C_T$1_R#g;                  # \*~e  -> {\~e}
+    s#\\\*C(\w)#_Cv_L$1_R_R#g;               # \*Cc  -> {\v{c}}
+    s#\\\*,(\w)#_Cc_L$1_R_R#g;               # \*,e  -> {\c{e}}
+    s#\\\*:(\w)#_C"$1_R#g;                   # \*:e  -> {\"e}
+
+    s#(\w)\\\*v#_Cv_L$1_R_R#g;               # c\*v  -> {\v{c}}
+    s#(\w)\\\*_U#_C=$1_R#g;                  # e\*_  -> {\=e}
+    s#([Oo])\\\*/#_C$1_R#g;                  # o\*/  -> {\o}
+    s#(\w)\\\*\.#_Cd_L$1_R_R#g;              # e\*.  -> {\d{e}}
+    s#([Aa])\\\*o#_C$1$1_R#g;                # a\*o  -> {\aa}
+
+    s#\\\*([!?])#$1`#g;                      # \*?   -> ?`
+    s#\\\*8#_Css_R#g;                        # \*8   -> {\ss}
+    s#\\\*3#_h_Blower.5ex_H3_R_R#g;          # \*3   -> \hbox{\lower.5ex 3}
+    s#\\\*\(Th#_hI_Bhskip-.6ex_Braise.5ex_H_Mscriptscriptstyle_Bsupset_D_R_R#g;
+    s#\\\*\(th#_h_Clower.3ex_H_Blarge l_R_R_Bhskip-.52ex o_R#g;
+    s#\\\*D\-#_h_Booalign_L_LD_R_Bcrcr\n_Bhskip.2ex_Braise.25ex_H-_R_Bhfil_R_R#g;
+    s#\\\*d\-#_h_Booalign_L_Mpartial_D_Bcrcr\n_Bhskip.55ex_Braise.7ex_H-_R_Bhfil_R_R#g;
+    s#\\\*\(([AO])e#_C$1E_R#g;               # \*(Ae -> {\AE}
+    s#\\\*\(([ao])e#_C$1e_R#g;               # \*(ae -> {\ae}
+    s#\\\*q#_Cc_Lo_R_R#g;                    # \*q   -> {\c{o}}
+
+    # International (Roman-8) symbols
+
+    s#\\\(\.\.#_C"_B _R#g;                   # \(..  -> {\"\ }
+    s#\\\(([AEIOUYaeouy]):#_C"$1_R#g;        # \(A:  -> {\"A}
+    s#\\\(([AEIOUaceouy])'#_C'$1_R#g;        # \(A'  -> {\'A}
+    s#\\\(([AEIOUaeouy])`#_C`$1_R#g;         # \(A`  -> {\`A}
+    s#\\\(([AEIOUaeouy])\^#_C_A$1_R#g;       # \(A^  -> {\^A}
+    s#\\\(i:#_C"_Bi_R#g;                     # \(i:  -> {\"\i}
+    s#\\\(i(['`])#_C$1_Bi_R#g;               # \(i'  -> {\'\i}
+    s#\\\(i\^#_C_A_Bi_R#g;                   # \(i^  -> {\^\i}
+    s#\\\(([ANOano])~#_C_T$1_R#g;            # \(A~  -> {\~A}
+    s#\\\(([CcOo]),#_Cc_L$1_R_R#g;           # \(c,  -> {\c{c}}
+    s#\\\(([Ss])v#_Cv_L$1_R_R#g;             # \(sv  -> {\v{s}}
+    s#\\\(([Oo])/#_C$1_R#g;                  # \(O/  -> {\O}
+    s#\\\(ss#_Css_R#g;                       # \(ss  -> {\ss}
+    s#\\\(L\-#_Cpounds_R#g;                  # \(L-  -> {\pounds}
+    s#\\\(L=#_Cpounds_R#g;                   # \(L=  -> {\pounds}   # (Wrong!)
+    s#\\\(Y=#_h_Brm_Brlap=Y_R#g;             # \(Y=  -> \hbox{\rm\rlap=Y}
+    s#\\\(I([!?])#$1`#g;                     # \I!   -> !`
+    s#\\\((AE|ae|OE|oe)#_C$1_R#g;            # \(AE  -> {\AE}
+    s#\\\(([Aa])o#_C$1$1_R#g;                # \(Ao  -> {\AA}
+    s#\\\(TH#_hI_Bhskip-.6ex_Braise.5ex_H_Mscriptscriptstyle_Bsupset_D_R_R#g;
+    s#\\\(th#_h_Clower.3ex_H_Blarge l_R_R_Bhskip-.52ex o_R#g;
+    s#\\\(D\-#_h_Booalign_L_LD_R_Bcrcr\n_Bhskip.2ex_Braise.25ex_H-_R_Bhfil_R_R#g;
+    s#\\\(d\-#_h_Booalign_L_Mpartial_D_Bcrcr\n_Bhskip.55ex_Braise.7ex_H-_R_Bhfil_R_R#g;
+    s#\\\(([ao])_U#_E_Cb_Cscriptsize $1_R_R_D#g;
+
+    # The "Scandinavian currency sign" is made with a bold \circ rlap'ed 
+    # with 8 .'s.  Big, long, and ugly, but the result is not too bad.
+
+    s#\\\(ox#_h_Booalign_Cmbox_Cboldmath_Mcirc_D_R_Bcrcr\n_Bhskip-.04ex_Braise.78ex_H._R_Bhfil_Bcrcr\n_Bhskip-.04ex_Braise.08ex_H._R_Bhfil_Bcrcr\n_c#g;
+    s#_c#_Bhskip.7ex_Braise.78ex_H._R_Bhfil_Bcrcr\n_Bhskip.7ex_Braise.08ex_H._R_Bhfil_Bcrcr\n_c#g;
+    s#_c#_Bhskip-.14ex_Braise.89ex_H._R_Bhfil_Bcrcr\n_Bhskip-.14ex_Braise-.02ex_H._R_Bhfil_Bcrcr\n_c#g;
+    s#_c#_Bhskip.8ex_Braise.89ex_H._R_Bhfil_Bcrcr\n_Bhskip.8ex_Braise-.02ex_H._R_Bhfil_Bcrcr\n_R_R#g;
+
+    # All the symbols from groff chars.tr that aren't listed above.
+    #   What the heck is this??  not only is a\*: an a umlaut, but so is
+    #   \(a: and also \(:a !  God, I wish troff would get it together!
+    #   Oh, some people ignore all this and use \o to overlap it themselves!
+    #   \(ao is Ao in Roman-8, and an  o in groff.
+    #   \(Cs is Cards Spades in Roman-8 and Currency Scandanavian in groff.
+    #   How do I know which they meant??
+
+    s#\\\(bs##g;                             # \(bs  -> (not implemented)
+    s#\\\(%0#_h%_Bhskip-.16ex_Blower.15ex_H_Bscriptsize 0_R_R#g;
+    s#\\\(f/#/#g;                            # \(f/  -> /
+    s#\\\(ha#_h_Braise.3em_H_Mscriptstyle_Bwedge_D_R_R#g;
+    s#\\\(ti#_Msim_D#g;                      # \(ti  -> $\sim$
+    s#\\\(\-D#_h_Booalign_L_LD_R_Bcrcr\n_Bhskip.2ex_Braise.25ex_H-_R_Bhfil_R_R#g;
+    s#\\\(Sd#_h_Booalign_L_Mpartial_D_Bcrcr\n_Bhskip.8ex_Braise.7ex_H-_R_Bhfil_R_R#g;
+    s#\\\(TP#_hI_Bhskip-.6ex_Braise.5ex_H_Mscriptscriptstyle_Bsupset_D_R_R#g;
+    s#\\\(Tp#_h_Clower.3ex_H_Blarge l_R_R_Bhskip-.52ex o_R#g;
+    s#\\\(IJ#_LI_Bhskip-.2ex J_R#g;          # \(IJ  -> {I\hskip-.2ex J}
+    s#\\\(ij#_Li_Bhskip-.2ex j_R#g;          # \(ij  -> {i\hskip-.2ex j}
+    s#\\\('([ACEIOUaceou])#_C'$1_R#g;        # \('A  -> {\'A}
+    s#\\\(:([AEIOUYaeouy])#_C"$1_R#g;        # \(:A  -> {\"A}
+    s#\\\(\^([AEIOUaeou])#_C_A$1_R#g;        # \(^A  -> {\^A}
+    s#\\\(`([AEIOUaeou])#_C`$1_R#g;          # \(`A  -> {\`A}
+    s#\\\((['`])i#_C$1_Bi_R#g;               # \('i  -> {\'\i}
+    s#\\\(\^i#_C_A_Bi_R#g;                   # \(^i  -> {\^\i}
+    s#\\\(:i#_C"_Bi_R#g;                     # \(:i  -> {\"\i}
+    s#\\\(~([ANOano])#_C_T$1_R#g;            # \(~A  -> {\~A}
+    s#\\\(v([CcSsZz])#_Cv_L$1_R_R#g;         # \(vs  -> {\v{s}}
+    s#\\\(,([Cc])#_Cc_L$1_R_R#g;             # \(,c  -> {\c{c}}
+    s#\\\(/([OoLl])#_C$1_R#g;                # \(/O  -> {\O}
+    s#\\\(o([Aa])#_C$1$1_R#g;                # \(oA  -> {\AA}
+    s#\\\(a"#_CH_L _R_R#g;                   # \(a"  -> {\H{ }}
+    s#\\\(a\-#_C=_L _R_R#g;                  # \(a-  -> {\={ }}
+    s#\\\(a\.#_C._L _R_R#g;                  # \(a.  -> {\.{ }}
+    s#\\\(a\^#_C_A_L _R_R#g;                 # \(a^  -> {\^{ }}
+    s#\\\(ab#_Cu_L _R_R#g;                   # \(ab  -> {\u{ }}
+    s#\\\(ac#_Cc_L _R_R#g;                   # \(ac  -> {\c{ }}
+    s#\\\(ad#_C"_L _R_R#g;                   # \(ad  -> {\"{ }}
+    s#\\\(ah#_Cv_L _R_R#g;                   # \(ah  -> {\v{ }}
+    s#\\\(a~#_C_T_L _R_R#g;                  # \(a~  -> {\~{ }}
+    s#\\\(ho#_Cc_L _R_R#g;                   # \(ho  -> {\c{ }}  # (wrong!)
+    s#\\\(\.([ij])#_C$1_R#g;                 # \(.i  -> {\i}
+    s#\\\(Do#$#g;                            # \(Do  -> $
+    s#\\\(Po#_Cpounds_R#g;                   # \(Po  -> {\pounds}
+    s#\\\(Ye#_h_Brm_Brlap=Y_R#g;             # \(Ye  -> \hbox{\rm\rlap=Y}
+    s#\\\(Fo#_Mscriptscriptstyle_Bll_D#g;    # \(Fo  -> $\scriptscriptstyle\ll$
+    s#\\\(Fc#_Mscriptscriptstyle_Bgg_D#g;    # \(Fc  -> $\scriptscriptstyle\gg$
+    s#\\\(fo#_Mscriptscriptstyle_l_D#g;      # \(fo  -> $\scriptscriptstyle<$
+    s#\\\(fc#_Mscriptscriptstyle_g_D#g;      # \(fc  -> $\scriptscriptstyle>$
+    s#\\\(r([!?])#$1`#g;                     # \(r!  -> !`
+    s#\\\(OK#_Cmbox_Cboldmath_Msurd_D_R_R#g; # \(OK  ->{\mbox{\boldmath$\surd$}}
+    s#\\\(Of#_E_Cb_Cscriptsize a_R_R_D#g;    # \(Of  -> ${}^{\scriptsize a}}$
+    s#\\\(Om#_E_Cb_Cscriptsize o_R_R_D#g;    # \(Om  -> ${}^{\scriptsize o}}$
+    s#\\\(S(\d)#_E$1_D#g;                    # \(S1  -> ${}^1$
+    s#\\\(lA#_MLeftarrow_D#g;                # \(lA  -> $\Leftarrow$
+    s#\\\(rA#_MRightarrow_D#g;               # \(rA  -> $\Rightarrow$
+    s#\\\(hA#_MLeftrightarrow_D#g;           # \(hA  -> $\Leftrightarrow$
+    s#\\\(dA#_MDownarrow_D#g;                # \(dA  -> $\Downarrow$
+    s#\\\(uA#_MUparrow_D#g;                  # \(uA  -> $\Uparrow$
+    s#\\\(vA#_MUpdownarrow_D#g;              # \(vA  -> $\Updownarrow$
+    s#\\\(va#_Mupdownarrow_D#g;              # \(va  -> $\updownarrow$
+    s#\\\(ba#_Chskip.4ex_Bvrule width.2ex height1.7ex depth0ex_R#g;
+    s#\\\(bb#_h_Bhskip.4ex_H_Booalign_Cvrule width.2ex height.5ex depth.4ex_Bcrcr\n_Bhfil_Braise.8ex_H_Bvrule width.2ex height.9ex depth0ex_R_Bhfil_R_R_R#g;
+    s#\\\(tm#_E_Crm_Buppercase_LTM_R_R_D#g;  # \(tm  -> ${}^{\rm\uppercase{TM}}$
+    s#\\\(ps#_BP#g;                          # \(ps  -> \P
+    s#\\\(en#-#g;                            # \(en  -> -
+    s#\\\(lB#_L_R[#g;                        # \(lB  -> {}[
+    s#\\\(rB#]#g;                            # \(rB  -> ]
+    s#\\\(lC#{#g;                            # \(lC  -> {
+    s#\\\(rC#}#g;                            # \(rC  -> }
+    s#\\\(la#_Mlangle_D#g;                   # \(la  -> $\langle$
+    s#\\\(ra#_Mrangle_D#g;                   # \(ra  -> $\rangle$
+    s#\\\(lq#``#g;                           # \(lq  -> ``
+    s#\\\(rq#''#g;                           # \(rq  -> ''
+    s#\\\(oq#`#g;                            # \(oq  -> `
+    s#\\\(at#@#g;                            # \(at  -> @
+    s#\\\(sh#\##g;                           # \(sh  -> #
+    s#\\\(rs#_I#g;                           # \(rs  -> $\backslash$
+    s#\\\(3d#_D_H._R_Braise.9ex_H._R_H._R_D#g;# \(3d -> .:.
+    s#\\\(~~#_Mapprox_D#g;                   # \(~~  -> $\approx$
+    s#\\\(!=#_Mneq_D#g;                      # \(!=  -> $\neq$
+    s#\\\(=~#_Mcong_D#g;                     # \(=~  -> $\cong$
+    s#\\\(AN#_Mwedge_D#g;                    # \(AN  -> $\wedge$
+    s#\\\(OR#_Mvee_D#g;                      # \(OR  -> $\vee$
+    s#\\\(Ah#_Maleph_D#g;                    # \(Ah  -> $\aleph$
+    s#\\\(Im#_MIm_D#g;                       # \(Im  -> $\Im$
+    s#\\\(Re#_MRe_D#g;                       # \(Re  -> $\Re$
+    s#\\\(md#_Mcdot_D#g;                     # \(md  -> $\cdot$
+    s#\\\(nm#_Mnotin_D#g;                    # \(nm  -> $\notin$
+    s#\\\(pp#_Mperp_D#g;                     # \(pp  -> $\perp$
+    s#\\\(c\*#_Motimes_D#g;                  # \(c*  -> $\otimes$
+    s#\\\(c\+#_Moplus_D#g;                   # \(c+  -> $\oplus$
+    s#\\\(\-h#_Mhbar_D#g;                    # \(-h  -> $\hbar$
+    s#\\\(CL#_Mclubsuit_D#g;                 # \(CL  -> $\clubsuit$
+    s#\\\(SP#_Mspadesuit_D#g;                # \(SP  -> $\spadesuit$
+    s#\\\(HE#_Mheartsuit_D#g;                # \(HE  -> $\heartsuit$
+    s#\\\(DI#_Mdiamondsuit_D#g;              # \(DI  -> $\diamondsuit$
+    s#\\\(CR#_Mhookleftarrow_D#g;            # \(CR  -> $\hookleftarrow$
+    s#\\\(st#_Mni_D#g;                       # \(st  -> $\ni$
+    s#\\\(/_U#_Mangle_D#g;                   # \(/_  -> $\angle$
+    s#\\\(\-\+#_Mmp_D#g;                     # \(-+  -> $\mp$
+    s#\\\(nc#_Mnot_Bsupset_D#g;              # \(nc  -> $\not\supset$
+    s#\\\(ne#_Mnot_Bequiv_D#g;               # \(ne  -> $\not\equiv$
+
+
+    # misc
+
+    s#\\u([^\\]*)\\d#_Braisebox_L1ex_R_L$1_R#g;
+    s#\\d([^\\]*)\\u#_Braisebox_L-1ex_R_L$1_R#g;
+    s#\\z(.)#_Brlap_L$1_R#g;                 # \z|_   -> L
+    s#\\\*\(mm#mm#g;                         # \*(mm  -> mm
+
+    s#\\&##g;                                # \&     ->
+
+  }   # done with troff special chars
+
+  # finally, do eqn processing if they asked for it.
+  #
+  # This is very crude, and handles only the very simple eqn constructs.
+  # We should have some support for reading in eqn definitions rather
+  # than hard-coding some.
+  #
+  if ($handleeqn) {
+    local ($oldline);
+    # print STDERR "\nfrom: $_\n" if /@.*@/;
+    # replace  @blah $\foo$ bar@   with   @blah \foo bar@
+    1 while s/@([^@]* su[bp] [^@]*)_M([^@]*)_D([^@]*)@/@$1_B$2$3@/g;
+    1 while s/@([^@]*)_M([^@]*)_D([^@]* su[bp] [^@]*)@/@$1_B$2$3@/g;
+    while (/@.*@/) {
+      $oldline = $_;
+      s/@\s*roman\s+([^@]*)@/@$1@/g;
+      s/@\s*{\s*([^\s@]+)\s*sub\s+([^\s@]+)\s*}\s*sup\s+([^\s@]+)\s*([^@]*)@/_L_D_Crm_S$1_R__L$2_R_A_L$3_R_D_R@$4@/g;
+      s/@\s*([^\s@]+)\s*sub\s+([^\s@]+)\s*([^@]*)@/_L_D_Crm_S$1_R__L$2_R_D_R@$3@/g;
+      s/@\s*([^\s@]+)\s*sup\s+([^\s@]+)\s*([^@]*)@/_L_D_Crm_S$1_R_A_L$2_R_D_R@$3@/g;
+      s/_L_D_Crm_S""_R/_L_D_L_R/g;   # handle @ "" sub 18 @
+      s/@mu@/_Mmu_D/g;
+      s/@angstrom@/_CAA_R/g;
+      s/@co2@/@CO sub 2@/g;
+      s/@no2@/@NO sub 2@/g;
+      s/@nox@/@NO sub x@/g;
+      s/@n2@/@N sub 2@/g;
+      s/@so2@/@SO sub 2@/g;
+      s/@so4@/@{SO sub 4} sup 2-@/g;
+      s/@no3@/@{NO sub 3} sup -@/g;
+      s/@hno3@/@HNO sub 3@/g;
+      if ($oldline eq $_) {
+        s/@\s*([^\s@]+)\s*([^@]*)@/_L$1_R@$2@/g;
+      }
+      s/@\s*@//g;
+      # print STDERR "  to: $_\n";
+    }
+  }
+
+  # protect TeX characters
+  if ($protectTeX) {
+    s/\\/_I/g;
+    s/#/\\#/g;
+    s/\$/\\$/g;
+    s/%/\\%/g;
+    s/&/\\&/g;
+    s/{/_D\\lbrace_D/g;
+    s/}/_D\\rbrace_D/g;
+    s/\|/$|$/g;
+    s/</\$<$/g;
+    s/>/\$>$/g;
+    s/\^/\\^{}/g;
+    s/~/\\~{}/g;
+  }
+
+  # now convert our escaped characters back to their real selves
+  s/_B/\\/g;
+  s/_I/\$\\backslash$/g;
+  s/_C/{\\/g;
+  s/_S/ /g;
+  s/_L/{/g;
+  s/_R/}/g;
+  s/_l/</g;
+  s/_g/>/g;
+  s/_T/~/g;
+  s/_A/^/g;
+  s/_D/$/g;
+  s/_M/\$\\/g;
+  s/_V/|/g;
+  s/_E/\${}^/g;
+  s/_H/\\hbox{/g;
+  s/_h/\\leavevmode\n\\hbox{/g;
+  s/_U/\\_/g;
+  s/\n\n/\\par\n/g;           # this is for fields that want paragraphs
+  return $_;
+}
+
+##########################################
+# This converts IBMish control character combinations into troff
+# This is new and mostly untested.
+# Why troff?  We convert ibm to troff, then troff to TeX.  That
+# way people can use this program to convert refer w/controls into
+# plain refer.  Or they can get the full blown refer->TeX.
+#
+# refer(c) -> refer     r2b -n -der -ibm
+# refer(c) -> TeX       r2b -ibm
+# refer(c) -> tib       r2b -der -ibm
+#
+sub doibmtoroff {
+  local($_) = @_;
+
+  if (/[\200-\376]/) {
+    # use the -ms i\*' for accents, as all troff's can handle that.
+    # I'd rather use \('i, but that works for groff, while eroff wants \(i'
+
+    s/[\200]/C\\*,/g;
+    s/[\201]/u\\*:/g;
+    s/[\202]/e\\*'/g;
+    s/[\203]/a\\*^/g;
+    s/[\204]/a\\*:/g;
+    s/[\205]/a\\*`/g;
+    s/[\206]/a\\*o/g;
+    s/[\207]/c\\*,/g;
+    s/[\210]/e\\*^/g;
+    s/[\211]/e\\*:/g;
+    s/[\212]/e\\*`/g;
+    s/[\213]/i\\*:/g;
+    s/[\214]/i\\*^/g;
+    s/[\215]/i\\*`/g;
+    s/[\216]/A\\*:/g;
+    s/[\217]/A\\*o/g;
+    s/[\220]/E\\*'/g;
+    s/[\221]//g;      # Can't make out what this is supposed to be.
+    s/[\222]//g;      # Ditto
+    s/[\223]/o\\*^/g;
+    s/[\224]/o\\*:/g;
+    s/[\225]/o\\*`/g;
+    s/[\226]/u\\*^/g;
+    s/[\227]/u\\*`/g;
+    s/[\230]/y\\*:/g;
+    s/[\231]/o\\*:/g;
+    s/[\232]/u\\*:/g;
+    s/[\233]/\\\(ct/g;
+    s/[\234]/\\\(L-/g;
+    s/[\235]/\\\(Y=/g;
+    s/[\236]//g;      # should handle this
+    s/[\237]//g;      # and this
+    s/[\240]/a\\*'/g;
+    s/[\241]/i\\*'/g;
+    s/[\242]/o\\*'/g;
+    s/[\243]/u\\*'/g;
+    s/[\244]/n\\*~/g;
+    s/[\245]/N\\*~/g;
+    s/[\246]/\\\(a_/g;
+    s/[\247]/\\\(o_/g;
+
+    s/[\250]/\\*?/g;
+    s/[\251]//g;
+    s/[\252]/\\\(no/g;
+    s/[\253]/\\\(12/g;
+    s/[\254]/\\\(14/g;
+    s/[\255]/\\*!/g;
+    s/[\256]/\\\(<</g;
+    s/[\257]/\\\(>>/g;
+
+   s/[\360]/\\\(==/g;
+    s/[\361]/\\\(+-/g;
+    s/[\362]/\\\(>=/g;
+    s/[\363]/\\\(<=/g;
+    s/[\364]//g;
+    s/[\365]//g;
+    s/[\366]/\\\(di/g;
+    s/[\367]/\\\(~~/g;
+
+    s/[\373]/\\\(sr/g;
+
+    # I'm taking a guess that \376 is supposed to be the R set.
+    s/[\376]/\\\(Re/g;
+  }
+ 
+  return $_;
+}
+
